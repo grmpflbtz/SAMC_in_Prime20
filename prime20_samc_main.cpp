@@ -142,8 +142,9 @@ tuple<double,double,double> distVecBC(Bead vecA, Bead vecB);                    
 double RND();                                                                           // RNG generating double (-1,1)
 void ConsoleOutputHead();                                                               // writes simulation head to console
 bool newChain(Chain Chn[], int chnNum);                                                 // creates new chain
+bool readParaInput(Chain Chn[]);                                                        // read system arameters from file
 bool readCoord(Chain Chn[], string inputFile);                                          // read chain config from file
-bool readInputFile(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
+bool readPrevRunInput(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool extra_lngE(string inputFile, double lngE[]);                                       // reads lngE data from file
 bool outputPositions(Chain Chn[], string name, int mode);                               // writes positions to file "name"
 bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
@@ -204,7 +205,7 @@ int main()
     }
 
     // lngE, H, gammasum, t: read from input file or start new
-    if( readInputFile(Chn, "input.dat", lngE, H, tcont, gammasum) ) {
+    if( readPrevRunInput(Chn, "input.dat", lngE, H, tcont, gammasum) ) {
         gamma = GAMMA_0*T_0/tcont;
     }
     else {
@@ -1051,7 +1052,7 @@ bool readCoord(Chain Chn[], string inputFile)
     }
 }
 // reads lngE, H, gammasum, and t from input file
-bool readInputFile(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum)
+bool readPrevRunInput(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum)
 {
     ifstream input;
     stringstream ss_line;

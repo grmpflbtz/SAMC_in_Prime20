@@ -1,0 +1,2432 @@
+/* FILE: prime20_samc_main.cpp
+ * 
+ *                          X         X     XXXX     XXXX  XX     XX
+ *                          XX       XX    XX  XX     XX   XXX    XX
+ *                          XXX     XXX   XX    XX    XX   XXXX   XX
+ *                          XXXX   XXXX  XXX    XXX   XX   XX XX  XX
+ *                          XX XX XX XX  XXXXXXXXXX   XX   XX  XX XX
+ *                          XX  XXX  XX  XXX    XXX   XX   XX   XXXX
+ *                          XX   X   XX  XX      XX   XX   XX    XXX
+ *                          XX       XX  XX      XX  XXXX  XX     XX
+ * 
+ *              :'''''''''''''''''''''''''''''''''''''''''''''''''''''''''':
+ *              : SAMC simulation for A-beta peptides in the Prime20 model :
+ *              :,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,:
+ */
+/* changelog:
+ * 2019-02-08   Start. initialize bead & Amino acid class.
+ * 2019-02-22   newChain function set up. trying to construct first amino acid - method via angles or distances?
+ * 2019-03-01   first amino acid constructed - geometric solution - positions correct
+ * 2019-03-08   whole chain created (flat). angles and distances correct (test program "config_check.cpp")
+ * 2019-03-22   EnOv_bead() finished and integrated into wiggle() - extensive tests missing
+ * 2019-03-28   abandon hierarchical energy calculation -> change to neighbour lists, which should be more efficient for multiple chains (legacy version 20190328)
+ * 2019-04-03   new neighbourlist concept -> linked lists (legacy version 20190403)
+ * 2019-05-09   HBcheck created and implemented in wiggle. still needs checking in running simulation.
+ * 2019-05-13   wiggle implemented in newChain. including HBList and HBDist updates.
+ * 2019-05-16   periodic boundary condition and shortest distance calculation implemented in wiggle() and distVecBC()
+ *              split parts in newChain(): only creation now. Movement to randomize starting configuration is now in main() (legacy version in 20190516)
+ * 2019-05-29   EO_SegBead() is new function, for energy calculation and overlapp check. One can specify the segment the bead is checked against in the parameters (legacy version in 20190523)
+ * 2019-06-06   start to implement tracker of applied periodic boundary conditions in order to restore real coordinates for rotation moves (legacy version in 20190606)
+ * 2019-06-19   added rotPsi() -> all move functions are constructed 
+ * 2019-06-26   tweaked EO_SegSeg() to count 2x energy, when moving along one segment to account for energy contribution in other segment
+ * 2019-07-30   in wiggle(): start switch(j) cascade for re-considering brokenHB for new HB
+ * 2019-08-07   noticed that in HB_check() the periodic boundary conditions were not considered → use distVecBC() instead of manual distance calculations (legacy version in 20190807)
+ *              implementation of HB at chain ends → rotation of NCa in NCaC plane by angle 2.668
+ * 2019-08-15   introduced "class Chain" to enable multiple chains in system (legacy version 20190815)
+ * 2019-10-15   two chains working in system. All HB problems seem to be solved (further, more extensive test necessary).
+ *              Write-function for backup files implemented.
+ * 2019-10-25   read functions for coordinate input and lngE input implemented
+ * 2019-11-11   added extra_lng() function: enables independent lngE[] preset from input file
+ * 2019-12-17   backup in archive | change move selection to real_dist with trunc() | 
+ * 2020-01-10   corrected EBin selection to not include energies < EMin
+ * 2020-02-03   readCoord() function read BC coordinates → now: reads real coords (R script transforms backup_coord_output)
+ *              tranlsation move implementation startet (legacy version 20200203) - done
+ * 2020-02-05   transition to SWBB = 4.5 and 
+ *              squeeze parameters. New chain creation function necessary (legacy version 20200205)
+ * 2020-02-14   introduce production (approximate lng) and measure run (fixed lng - measure geometric observables). (legacy version 20200214)
+ * 2020-08-04   changed nstep to number of beads in system
+ */
+/* abbreviations:
+ * SC   - side chain
+ * BB   - backbone
+ * SW   - square well
+ * SQ   - squared
+ * HC   - Hard core
+ * HS   - hard sphere
+ * SQZ  - squeeze factor
+ */
+
+#include <iostream>
+#include <fstream>
+#include <iomanip>
+#include <stdio.h>
+#include <math.h>
+#include <tuple>
+#include <random>
+#include <thread>
+#include <chrono>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <array>
+
+#include "prime20_samc_chain.hpp"
+#include "prime20_samc_para.hpp"
+#include "timer.hpp"
+
+using namespace std;
+
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   SIMULATION PARAMETERS - GLOBAL VARIABLES   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+const int N_CH = 2;                         // number of chains in system
+const int N_AA = 14;                         // number of amino acids in chains
+const char AA_seq[N_AA+1] = "QQQQQQQQQQQQQQ";     // amino acid sequence of chains
+const double L = 100.0;                      // side length of cubic simulation cell
+
+const int NBin = 100;                        // number of energy bins for histogram
+const double EMin = -10.0;
+const double EMax = -0.0;
+const double BinW = (EMax-EMin)/(double)NBin;
+const double EStart = EMax;                 // energy below which the sim ends the preSAMC moves
+const int tStart = 5000;                       // minimum number of preSAMC moves
+
+const int nstep = N_CH*N_AA*4;
+//const int nstep = 8*N_AA*N_CH;
+const unsigned long int T_0 = 1e4;
+const unsigned long int T_MAX = 1e9;
+const unsigned long int T_WRITE = 1e6;
+const unsigned long int T_BC_RESET = 1e5;
+
+const double GAMMA_0 = 0.01;
+
+const int NBOX = 10;
+const double LBOX = 10;                  // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
+int neighHead[NBOX*NBOX*NBOX], neighList[4*N_AA*N_CH];
+
+int HBList[N_CH*N_AA][2], HBLcpy[N_CH*N_AA][2];                         // BB HB contact list. value is bond partner amino acid (-1 if no HB). column order [N][C]
+double NCDist[N_CH*N_AA][N_CH*N_AA], NCDcpy[N_CH*N_AA][N_CH*N_AA];      // N_CH*N_AA x N_CH*N_AA matrix of N-C distances squared
+
+//Random selection weights of moves.
+const int WT_WIGGLE = 800;              // weight wiggle
+const int WT_PHI = 20;                  // weight rotPhi
+const int WT_PSI = 20;                  // weight rotPsi
+const int WT_TRANS = 0;                 // weight translation
+const int WT_ROSENC = 1;
+const int WT_ROSENN = 1;
+// movement restraints
+const double DISP_MAX = 0.01;           // max displacement in wiggle move
+const double DPHI_MAX = 1.047;          // max Phi rotation angle in rotphi (59.99°)
+const double DPSI_MAX = 1.047;          // max Psi rotation angle in rotpsi (59.99°)
+
+const bool EBIN_TRUNC_UP = false;        // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
+const bool MEASURE = false;
+    const bool HB_CONTMAT = true;
+    const bool WRITE_CONFIG = true;
+        const int CONFIG_N = 2;
+        const double CONFIG_ENER[CONFIG_N] = {-1.32, 0.4};
+        const double CONFIG_VAR = 0.02;
+
+mt19937 rng(time(NULL));                // constructor for random number generator
+//mt19937 rng(2);                        // debug
+
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+double dotPro(double vecA[], double vecB[]);                                            // dot product
+double absVec(double vec[]);                                                            // absolute of vector
+tuple<double,double,double> crossPro(double vecA[], double vecB[]);                     // cross product
+tuple<double,double,double> distVecBC(Bead vecA, Bead vecB);                            // distance vector
+double RND();                                                                           // RNG generating double (-1,1)
+void ConsoleOutputHead();                                                               // writes simulation head to console
+bool newChain(Chain Chn[], int chnNum);                                                 // creates new chain
+bool readCoord(Chain Chn[], string inputFile);                                          // read chain config from file
+bool readInputFile(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
+bool extra_lngE(string inputFile, double lngE[]);                                       // reads lngE data from file
+bool outputPositions(Chain Chn[], string name, int mode);                               // writes positions to file "name"
+bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
+bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
+bool HBcheck(Chain Chn[], int iN, int iC);                                              // check if HB exists and update HBList
+double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
+double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch);   // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
+double E_check(Chain Chn[]);                                                            // recalculate energy from scratch
+bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
+bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE);                          // small displacement of Chn[h].AmAc[i].Bd[j]
+bool rotPhi(Chain Chn[], int i1, int high, double &deltaE);                             // rotation around N_AA-Ca axis of i1-th amino acid
+bool rotPsi(Chain Chn[], int i1, int high, double &deltaE);                             // rotation around Ca-C axis of i1-th amino acid
+bool translation(Chain Chn[], int iChn, double &deltaE);                                // translation move of the whole chain
+bool checkBndLngth(Chain Chn[], int sp, int ep);                                        // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+bool resetBCcouter(Chain Chn[]);                                                        // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
+int assignBox(Bead Bd);                                                                 // assigns neighbour list box to bead
+int LinkListInsert(Chain Chn[], int i1, int j1);                                        // insert particle AmAc[i1].Bd[j1] into Linked List
+int LinkListUpdate(Chain Chn[], int i1, int j1);                                        // update Linked List position of AmAc[i1].Bd[j1]
+
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+int main() 
+{
+    Timer Timer;                                            // timer for simulation
+    Chain Chn[N_CH];                                        // chains in system
+    Bead BdCpy[4*N_AA*N_CH];                                // copy of Beads
+    uniform_real_distribution<double> realdist01(0.0,1.0);  // uniform distribution of real numbers
+    ofstream backup;
+    std::ostringstream oss;
+    string filename;
+    double Eold, Enew, Ecur, deltaE;                        // energy values
+    double dist[3];                                         // distance vector
+    double distabs;                                         // absolute distance
+    bool accept;                                            // acceptance value of move in SAMC
+    int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
+    int oldBox, prevNei, nextNei;                           // variables for neighbour list calculations
+    long unsigned int t, tcont, tTimer;                     // time variable keeping track of # steps passed
+    int tstep, tE, twrite, tBCreset;
+    long unsigned int H[NBin];                              // energy histogram
+    int eBin_n, eBin_o;                                     // energy bin of new and old energy value
+    long unsigned int nattempt[4], naccept[4];              // no. attempted moves and no. accepted moves
+    double lngE[NBin];                                      // ln g(E): logarithm of density of states g(E) → current approximation
+    double contHB[NBin][N_CH*N_AA][N_CH*N_AA];              // contact matrix of hydrogen bonds
+    int conf_n[CONFIG_N], conf_write_t[CONFIG_N];           // number of configurations written for the selcted energy and last time writing a config for this energy
+    double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
+
+    fill_n(neighHead, NBOX*NBOX*NBOX, -1), fill_n(neighList, 4*N_AA*N_CH, -1);
+
+    ConsoleOutputHead();
+
+    // initialization of some values
+    for( int i=0; i<4; i++ ) {
+        nattempt[i] = 0;
+        naccept[i] = 0;
+    }
+
+    // lngE, H, gammasum, t: read from input file or start new
+    if( readInputFile(Chn, "input.dat", lngE, H, tcont, gammasum) ) {
+        gamma = GAMMA_0*T_0/tcont;
+    }
+    else {
+        // initialize lngE and H and co.
+        for( int i=0; i<NBin; i++ ) {
+            lngE[i] = 0;
+            H[i] = 0;
+        }
+        gamma = GAMMA_0;
+        gammasum = 0.0;
+        tcont = 0;
+    }
+    // check if there is an extra input file for lngE
+    if( extra_lngE( "input.lng", lngE ) ) {
+        tcont = 0;
+        if(MEASURE) {
+            if(HB_CONTMAT) {
+                std::cout << "production run with fixed ln g(E)" << std::endl;
+                for( int i=0; i<NBin; i++ ) { 
+                    H[i] = 0; 
+                    for( int j=0; j<N_CH*N_AA; j++ ) {
+                        for( int k=0; k<N_CH*N_AA; k++ ) {
+                            contHB[i][j][k] = 0;
+                        }
+                    }
+                }
+            }
+            if(WRITE_CONFIG) {
+                for( int i=0; i<CONFIG_N; i++ ) {
+                    conf_n[i] = 0;
+                    conf_write_t[i] = 0;
+                }
+            }
+        }
+    }
+    // geometry: read from input file or create new
+    if( !readCoord(Chn, "input.xyz") ) {
+        std::cout << "creating new Chain" << std::endl;
+        for( int i=0; i<N_CH; i++ ) {
+            newChain(Chn, i);
+            for( int m=0; m<i+1; m++) {
+                for( int j=0; j<N_AA; j++ ) {
+                    for( int k=0; k<4; k++ ) {
+                        dist[2] = Chn[m].AmAc[j].Bd[k].getR(2) + 15;
+                        Chn[m].AmAc[j].Bd[k].setBC( 2, Chn[m].AmAc[j].Bd[k].getBC(2) + floor(dist[2]/L) );
+                        dist[2] = dist[2] - L*floor(dist[2]/L);
+                        Chn[m].AmAc[j].Bd[k].setR( Chn[m].AmAc[j].Bd[k].getR(0), Chn[m].AmAc[j].Bd[k].getR(1), dist[2] );
+                        LinkListUpdate(Chn, (m*N_AA)+j, k);
+                    }
+                }
+            }
+        }
+    }
+
+    // position check file output
+    outputPositions(Chn, "AnorLondo.xyz", 0);
+
+    // initialize HB list and N-C distance list
+    for(int i = 0; i < N_CH*N_AA; i++) {
+        HBList[i][0] = -1;  HBLcpy[i][0] = -1;
+        HBList[i][1] = -1;  HBLcpy[i][1] = -1;
+        for(int j = 0; j < N_CH*N_AA; j++) {
+            if( (i/N_AA != j/N_AA) ||  ((i/N_AA == j/N_AA) && (abs(i-j) > 3)) ) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+                distabs = dotPro(dist, dist);
+                if(distabs < SW2HUGE) {                // exclude unrelevant distances
+                    NCDist[i][j] = distabs;
+                    NCDcpy[i][j] = NCDist[i][j];
+                    continue;
+                }
+            }
+            NCDist[i][j] = -1;
+            NCDcpy[i][j] = -1;
+        }
+    }
+    // first energy calculation - no HB, yet
+    Eold = 0.0;
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        for( int j=0; j<N_CH*N_AA; j++ ) {
+            if( HBcheck(Chn, i, j) ) {
+                Eold -= 1.0;
+            }
+        }
+        Eold += EO_SegBead(Chn, i/N_AA, i%N_AA, 3, i, N_CH*N_AA, 1);
+    }
+    // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
+    t = 0;
+    while( true ) {
+        // end pre-SAMC movement after tStart moves and within desired energy window
+        if( (t >= tStart) && (Eold >= EMin) && (Eold < EStart) ) {
+            eBin_o = floor((Eold-EMin)/BinW);
+            if( eBin_o == NBin) { eBin_o = NBin-1; }
+            std::cout << "pre-SAMC move " << t << "\r" << std::flush;
+            break;
+        }
+
+        if( t%1000 == 0 ) {
+            std::cout << "pre-SAMC move " << t << "\r" << std::flush;
+        }
+        // HBList copy
+        for( int k=0; k<N_CH*N_AA; k++ ) {
+            HBLcpy[k][0] = HBList[k][0];
+            HBLcpy[k][1] = HBList[k][1];
+        }
+        deltaE = 0.0;
+        // select move type
+        moveselec = trunc(realdist01(rng)*(WT_WIGGLE + WT_PHI + WT_PSI + WT_TRANS));
+        if( moveselec < WT_WIGGLE )                             { movetype = 0; }   // wiggle
+        else if( moveselec < WT_WIGGLE+WT_PHI )                 { movetype = 1; }   // rotPhi
+        else if( moveselec < WT_WIGGLE+WT_PHI+WT_PSI )          { movetype = 2; }   // rotPsi
+        else if( moveselec < WT_WIGGLE+WT_PHI+WT_PSI+WT_TRANS ) { movetype = 3; }   // translation
+        else { std::cout << "ERROR\tno movetype was selected" << endl; return 0; }
+
+        switch( movetype ) {
+            case 0:
+                i_rand = trunc(realdist01(rng)*(N_CH*N_AA*4));
+                ip = i_rand/4;                              // amino acid identifier
+                jp = i_rand%4;                              // bead
+                accept = wiggle(Chn, ip/N_AA, ip%N_AA, jp, deltaE);
+                break;
+            case 1:
+                ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
+                jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
+                accept = rotPhi(Chn, ip, jp, deltaE);
+                break;
+            case 2:
+                ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
+                jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
+                accept = rotPsi(Chn, ip, jp, deltaE);
+                break;
+            case 3:
+                ip = trunc(realdist01(rng)*N_CH);
+                accept = translation(Chn, ip, deltaE);
+                break;
+            default:
+                std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
+        }
+
+        if(accept) {        // legal move
+            Eold += deltaE;
+            // sync HBDist[] and HBDcpy[]
+            switch( movetype ) {
+                case 0:
+                    if( jp == 0 ) {
+                        for( int m=0; m<N_CH*N_AA; m++ ) {
+                            NCDcpy[ip][m] = NCDist[ip][m];
+                        }
+                    }
+                    if( jp == 2 ) {
+                        for( int m=0; m<N_CH*N_AA; m++ ) {
+                            NCDcpy[m][ip] = NCDist[m][ip];
+                        }
+                    }
+                    break;
+                default:
+                    for( int m=0; m<N_CH*N_AA; m++ ) {
+                        for( int n=0; n<N_CH*N_AA; n++ ) {
+                            NCDcpy[m][n] = NCDist[m][n];
+                            NCDcpy[n][m] = NCDist[n][m];
+                        }
+                    }
+            }
+            // neighbour list is updated in move function - only if it returns true            
+        }
+        else {              // illegal move
+            // reset HBList and HBDist
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                HBList[k][0] = HBLcpy[k][0];
+                HBList[k][1] = HBLcpy[k][1];
+            }
+            // all legal steps are accepted → why copy NCDist[][] ? 
+            switch( movetype ) {                                // non-SAMC move: all legal moves are accepted -> why copy NCDist[][] ?
+                case 0:
+                    if( jp == 0 ) {
+                        for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }
+                    }
+                    if( jp == 2 ) {
+                        for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }
+                    }
+                    break;
+                default:
+                    for( int m=0; m<N_CH*N_AA; m++ ) {
+                        for( int n=0; n<N_CH*N_AA; n++ ) {
+                            NCDist[m][n] = NCDcpy[m][n];
+                            NCDist[n][m] = NCDcpy[n][m];
+                        }
+                    }
+            }
+        }
+
+        if( !checkBndLngth(Chn, 0, N_CH*N_AA) ) {               // check bond length after every move - if this failes: abort run
+            std::cerr << endl << "bond length error: t=" << t << std::endl;
+            std::cerr << "Energy = " << Eold << std::endl;
+            outputPositions(Chn, "AnorLondo.xyz", 1);
+            this_thread::sleep_for(chrono::milliseconds(200));
+            return 0;
+        }
+        Ecur = E_check(Chn);
+        if( abs(Eold-Ecur) > 0.01 ) {
+            std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
+            std::cerr.precision(3); std::cerr << std::fixed;
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                std::cerr << "k" << k << "\t";
+                for( int m=0; m<N_CH*N_AA; m++ ) {
+                    std::cerr << NCDist[k][m] << "\t";
+                } std::cerr << endl;
+            } std::cerr << endl;
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
+            }
+            outputPositions(Chn, "AnorLondo.xyz", 1);
+            this_thread::sleep_for(chrono::milliseconds(200));
+
+            return 0;
+        }
+        t++;
+    }
+    std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
+    // configuration when starting SAMC
+    outputPositions(Chn, "AnorLondo.xyz", 1);
+
+    /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+                    XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
+                    XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */    
+
+    t = tcont, tE = 1, twrite = 1, tBCreset = 1, tTimer = 0;
+    while( t<T_MAX) {
+        // lets go
+        tstep = 0;          // nstep steps are merged into one SAMC loop
+        while( tstep < nstep ) {
+
+            if( t%((int)1e3) == 0 ) {
+                Timer.PrintProgress(tTimer, T_MAX-tcont);
+            }
+
+            // select move type
+            moveselec = trunc(realdist01(rng)*(WT_WIGGLE + WT_PHI + WT_PSI + WT_TRANS));
+            if( moveselec < WT_WIGGLE )                                 { movetype = 0; }   // wiggle
+            else if( moveselec < (WT_WIGGLE+WT_PHI) )                   { movetype = 1; }   // rotPhi
+            else if( moveselec < (WT_WIGGLE+WT_PHI+WT_PSI) )            { movetype = 2; }   // rotPsi
+            else if( moveselec < (WT_WIGGLE+WT_PHI+WT_PSI+WT_TRANS) )   { movetype = 3; }   // translation
+            else { std::cerr << endl << "ERROR\tno movetype was selected" << endl; return 0; }
+            // chain copy setup
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                HBLcpy[k][0] = HBList[k][0];                                                                // improve efficiency! → select copied part based on movetype
+                HBLcpy[k][1] = HBList[k][1];
+            }
+            deltaE = 0.0;
+            nattempt[movetype]++;
+            switch( movetype ) {
+                case 0:
+                    i_rand = trunc(realdist01(rng)*(N_CH*N_AA*4));
+                    ip = i_rand/4;                              // amino acid identifier
+                    jp = i_rand%4;                              // bead
+                    BdCpy[ip*4+jp] = Chn[ip/N_AA].AmAc[ip%N_AA].Bd[jp];
+                    accept = wiggle(Chn, ip/N_AA, ip%N_AA, jp, deltaE);
+                    break;
+                case 1:
+                    ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
+                    jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
+                    switch( jp ) {
+                        case 0:
+                            for( int i=(ip/N_AA)*N_AA; i<ip+1; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    BdCpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+                                }
+                            }
+                            break;
+                        case 1:
+                            for( int i=ip; i<((ip/N_AA)+1)*N_AA; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    BdCpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+                                }
+                            }
+                    }
+                    accept = rotPhi(Chn, ip, jp, deltaE);
+                    break;
+                case 2:
+                    ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
+                    jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
+                    switch( jp ) {
+                        case 0:
+                            for( int i=(ip/N_AA)*N_AA; i<ip+1; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    BdCpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+                                }
+                            }
+                            break;
+                        case 1:
+                            for( int i=ip; i<((ip/N_AA)+1)*N_AA; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    BdCpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+                                }
+                            }
+                    }
+                    accept = rotPsi(Chn, ip, jp, deltaE);
+                    break;
+                case 3:
+                    ip = trunc(realdist01(rng)*N_CH);
+                    for( int i=0; i<N_AA; i++ ) {
+                        for( int j=0; j<4; j++ ) {
+                            BdCpy[ip*N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
+                        }
+                    }
+                    accept = translation(Chn, ip, deltaE);
+                    break;
+                default:
+                    std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
+            }
+
+            if( accept ) {      // legal move → check energy window and acceptance criterion
+                Enew = Eold + deltaE;
+                // check if Enew is in energy window → if not: don't count attempt
+                if( Enew<EMin || Enew > EMax ) {
+                    switch( movetype ) {
+                        case 0:     // wiggle
+                            Chn[ip/N_AA].AmAc[ip%N_AA].Bd[jp] = BdCpy[4*ip+jp];                     // reset to old coordinates
+                            if( jp == 0 ) {
+                                for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; } // reset NCDist[][]
+                            }
+                            if( jp == 2 ) {
+                                for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; } // reset NCDist[][]
+                            }
+                            break;
+                        case 3:     // translation
+                            for( int i=0; i<N_AA; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                    Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*N_AA+4*i+j];
+                                    Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                    LinkListUpdate(Chn, ip*N_AA+i, j);
+                                }
+                                for( int j=0; j<N_CH*N_AA; j++ ) {
+                                    if( j<ip*N_AA || j>=(ip+1)*N_AA ) {
+                                        NCDist[i+ip*N_AA][j] = NCDcpy[i+ip*N_AA][j];
+                                        NCDist[j][i+ip*N_AA] = NCDcpy[j][i+ip*N_AA];
+                                    }
+                                }
+                            }
+                            break;
+                        default:    // rotations
+                            switch( jp ) {
+                                case 0:
+                                    for( int i=(ip/N_AA)*N_AA; i<ip+1; i++ ) {
+                                        for( int j=0; j<4; j++ ) {
+                                            oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                            Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
+                                            Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
+                                            LinkListUpdate(Chn, i, j);                              // reset LinkedList
+                                        }
+                                        for( int j=0; j<N_CH*N_AA; j++ ) {                          // reset NCDist[][]
+                                            if( j<(ip/N_AA)*N_AA || j>ip-1 ) {
+                                                NCDist[i][j] = NCDcpy[i][j];
+                                                NCDist[j][i] = NCDcpy[j][i];
+                                            }
+                                        }
+                                    }
+                                    break;
+                                case 1:
+                                    for( int i=ip; i<((ip/N_AA)+1)*N_AA; i++ ) {
+                                        for( int j=0; j<4; j++ ) {
+                                            oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                            Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
+                                            Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
+                                            LinkListUpdate(Chn, i, j);                              // reset LinkedList
+                                        }
+                                        for( int j=0; j<N_CH*N_AA; j++ ) {                          // reset NCDist[][]
+                                            if( j<ip+1 || j>=((ip/N_AA)+1)*N_AA ) {
+                                                NCDist[i][j] = NCDcpy[i][j];
+                                                NCDist[j][i] = NCDcpy[j][i];
+                                            }
+                                        }
+                                    }
+                            }
+                    }
+
+                    for( int i=0; i<N_CH*N_AA; i++ ) {
+                        HBList[i][0] = HBLcpy[i][0];
+                        HBList[i][1] = HBLcpy[i][1];
+                    }
+                    nattempt[movetype]--;
+                    /*Ecur = E_check(Chn);
+                    if( abs(Ecur-Eold) > 0.01 ) {
+                        outputPositions(Chn, "AnorLondo.xyz", 1);
+                        std::cerr << "hahahahahahah versager t=" << t << endl;
+                    }*/
+                    continue;
+                }
+                // SAMC acceptance step
+                if(EBIN_TRUNC_UP) { eBin_n = floor(((Enew-EMin)/BinW)+0.00001); }
+                else { eBin_n = floor(((Enew-EMin)/BinW)-0.00001); }
+                if( eBin_n == NBin) { eBin_n = NBin-1; }            // E=0 lands in non-existing bin → belongs to highest bin
+                if( eBin_n == -1 && Enew > EMin-0.00001) { eBin_n = 0; }                  // E=EMin lands in non-existing bin if EBIN_TRUNK_UP = false → belongs to lowest bin
+
+                accept = acceptance(lngE[eBin_o], lngE[eBin_n]);
+            }
+            if( accept ) {      // Move accepted → update lngE, H, ...
+                naccept[movetype]++;
+                H[eBin_n]++;
+                if(!MEASURE) lngE[eBin_n] += gamma;
+                Eold = Enew;
+                eBin_o = eBin_n;
+                // sync HBDist[] and HBDcpy[]
+                switch( movetype ) {
+                    case 0:
+                        if( jp == 0 ) {
+                            for( int m=0; m<N_CH*N_AA; m++ ) {
+                                NCDcpy[ip][m] = NCDist[ip][m];
+                            }
+                        }
+                        if( jp == 2 ) {
+                            for( int m=0; m<N_CH*N_AA; m++ ) {
+                                NCDcpy[m][ip] = NCDist[m][ip];
+                            }
+                        }
+                        break;
+                    default:
+                        for( int m=0; m<N_CH*N_AA; m++ ) {
+                            for( int n=0; n<N_CH*N_AA; n++ ) {
+                                NCDcpy[m][n] = NCDist[m][n];
+                                NCDcpy[n][m] = NCDist[n][m];
+                            }
+                        }
+                }
+                // neighbour list is updated in move functions - only if it returns true
+            }
+            else {
+                H[eBin_o]++;
+                if(!MEASURE) lngE[eBin_o] += gamma;
+                // Bead and neighbour list reset
+                switch( movetype ) {
+                    case 0:     // wiggle
+                        Chn[ip/N_AA].AmAc[ip%N_AA].Bd[jp] = BdCpy[4*ip+jp];                         // reset old coordinates
+                        if( jp == 0 ) {
+                            for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }          // reset NCDist[][]
+                        }
+                        if( jp == 2 ) {
+                            for( int k=0; k<N_CH*N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }          // reset NCDist[][]
+                        }
+                        break;
+                    case 3:     // translation
+                        for( int i=0; i<N_AA; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*N_AA+4*i+j];
+                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                LinkListUpdate(Chn, ip*N_AA+i, j);
+                            }
+                            for( int j=0; j<N_CH*N_AA; j++ ) {
+                                if( j<ip*N_AA || j>=(ip+1)*N_AA ) {
+                                    NCDist[i+ip*N_AA][j] = NCDcpy[i+ip*N_AA][j];
+                                    NCDist[j][i+ip*N_AA] = NCDcpy[j][i+ip*N_AA];
+                                }
+                            }
+                        }
+                        break;
+                    default:    // rotation
+                        switch( jp ) {
+                            case 0:
+                                for( int i=(ip/N_AA)*N_AA; i<ip+1; i++ ) {
+                                    for( int j=0; j<4; j++ ) {
+                                        oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                        Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
+                                        Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
+                                        LinkListUpdate(Chn, i, j);                                  // reset LinkedList
+                                    }
+                                    for( int j=0; j<N_CH*N_AA; j++ ) {                              // reset NCDist[][]
+                                        if( j<(ip/N_AA)*N_AA || j>ip-1 ) {
+                                            NCDist[i][j] = NCDcpy[i][j];
+                                            NCDist[j][i] = NCDcpy[j][i];
+                                        }
+                                    }
+                                }
+                                break;
+                            case 1:
+                                for( int i=ip; i<((ip/N_AA)+1)*N_AA; i++ ) {
+                                    for( int j=0; j<4; j++ ) {
+                                        oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                        Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
+                                        Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
+                                        LinkListUpdate(Chn, i, j);                                  // reset LinkedList
+                                    }
+                                    for( int j=0; j<N_CH*N_AA; j++ ) {                              // reset NCDist[][]
+                                        if( j<ip+1 || j>=((ip/N_AA)+1)*N_AA ) {
+                                            NCDist[i][j] = NCDcpy[i][j];
+                                            NCDist[j][i] = NCDcpy[j][i];
+                                        }
+                                    }
+                                }
+                        }
+                }
+                // reset HBList and HBDist
+                for( int k=0; k<N_CH*N_AA; k++ ) {
+                    HBList[k][0] = HBLcpy[k][0];
+                    HBList[k][1] = HBLcpy[k][1];
+                }
+            }
+            if(MEASURE) {
+                if(HB_CONTMAT) {
+                    for( int i=0; i<N_CH*N_AA; i++ ) {
+                        if( HBList[i][0] > -1 ) { contHB[ eBin_o ][ i ][ HBList[i][0] ] += 1; }
+                    }
+                }
+                if(WRITE_CONFIG) {
+                    for( int i=0; i<CONFIG_N; i++ ) {
+                        if( abs(Eold - CONFIG_ENER[i]) <= CONFIG_VAR && conf_n[i]<10 ) {
+                            if( conf_write_t[i] + 10000 < t ) {
+                                oss.str("");
+                                oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
+                                filename = oss.str();
+                                backup.open(filename);
+                                if(backup.is_open()) {
+                                    backup << "# Coordinates of " << N_CH << " " << N_AA << "-mer(s) with sequence " << AA_seq << " at E=" << Eold << std::endl;
+                                    backup.close();
+                                    outputPositions(Chn, filename, 1);
+                                    std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
+                                } else {
+                                    std::cout << std::endl << "error opening " << filename << std::endl;
+                                }
+                                conf_n[i]++;
+                                conf_write_t[i]=t;
+                            }
+                        }
+                    }
+                }
+            }
+
+            gammasum += gamma;
+            tstep++;
+
+            //check histogram anomalies
+            for( int i=0; i<NBin; i++ ) {
+                if( H[i] > nstep*T_MAX) {
+                    std::cout << std::endl << "What the actual fuck is happening in here?" << std::endl;
+                    std::cout << "Eierkucheeeeeeeen" << std::endl;
+                }
+            }
+
+        }   // end of one MC step
+        //gamma update
+        if(!MEASURE){
+            gamma = GAMMA_0*T_0/((double)max(T_0,t));       // from Liang et al.
+        }
+
+        if( twrite == T_WRITE ) {           // write Backup-File
+            if(!MEASURE) {
+                BackupSAMCrun(Chn, Timer, t, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
+            } else {
+                BackupProdRun(Timer, t, H);
+                if(HB_CONTMAT) {
+                    filename = "HBmat.dat";
+                    backup.open(filename, ios::out);
+                    if(backup.is_open() ) {
+                        backup << "# Hydrogen Bind contact matrices after " << t+1 << " steps" << std::endl;
+                        std::setprecision(3); std::fixed;
+                        for( int i=0; i<NBin; i++ ) {
+                            for( int j=0; j<N_CH*N_AA; j++ ) {
+                                for( int k=0; k<N_CH*N_AA; k++ ) {
+                                    backup << contHB[i][j][k]/H[i] << " ";
+                                }
+                                backup << std::endl;
+                            }
+                        }
+                        backup.close();
+                    }
+                    else {
+                        std::cout << endl << "error opening " << filename << endl;
+                    }
+                }
+            }
+            twrite = 0;
+        }
+
+        // check bond length after every move - if this fails: abort run
+        /*if( !checkBndLngth(Chn, 0, N_CH*N_AA) ) {
+            std::cerr << endl << "bond length error" << endl;
+            std::cerr << "Energy = " << Eold << endl;
+            outputPositions(Chn, "AnorLondo.xyz", 1);
+            this_thread::sleep_for(chrono::milliseconds(200));
+            return 0;
+        }*/
+
+        // Energy check
+        if( tE == 10000 ) {
+            Ecur = E_check(Chn);
+            if( abs(Eold-Ecur) > 0.01 ) {
+                std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
+                std::cerr << endl << "HBList" << endl;
+                for( int k=0; k<N_CH*N_AA; k++ ) {
+                    std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl << std::flush;
+                }
+                std::cerr << endl;
+
+                outputPositions(Chn, "AnorLondo.xyz", 1);
+
+                std::cerr << "eternal darkness awaits…" << endl << std::flush;
+            }
+            tE = 0;
+        }
+
+        t++; tE++; twrite++, tBCreset++, tTimer++;
+    }   // end of SAMC main loop
+
+    // calculated positions after SAMC loop
+    outputPositions(Chn, "AnorLondo.xyz", 1);
+
+    Timer.PrintProgress(t, T_MAX);
+    this_thread::sleep_for(chrono::milliseconds(200));
+    std::printf("\npraise the sun ☀\n");
+
+    Timer.endProgram();
+
+    return 0;
+}
+
+
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DEFINTIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+double dotPro(double vecA[], double vecB[])
+{
+    double result = vecA[0]*vecB[0] + vecA[1]*vecB[1] + vecA[2]*vecB[2];
+    return result;
+}
+
+double absVec(double vec[])
+{
+    double result = sqrt(vec[0]*vec[0] + vec[1]*vec[1] + vec[2]*vec[2]);
+    return result;
+}
+
+tuple<double,double,double> crossPro(double vecA[], double vecB[])
+{
+    double x, y, z;
+    x = vecA[1]*vecB[2] - vecA[2]*vecB[1];
+    y = vecA[2]*vecB[0] - vecA[0]*vecB[2];
+    z = vecA[0]*vecB[1] - vecA[1]*vecB[0];
+    return make_tuple(x,y,z);
+}
+// distance vector from vecA to vecB including periodic boundary conditions
+tuple<double,double,double> distVecBC(Bead vecA, Bead vecB)
+{
+    // with periodic boundary conditions
+    double x, y, z;
+    x = vecB.getR(0)-vecA.getR(0) - L*round( (vecB.getR(0)-vecA.getR(0)) / (double) L );
+    y = vecB.getR(1)-vecA.getR(1) - L*round( (vecB.getR(1)-vecA.getR(1)) / (double) L );
+    z = vecB.getR(2)-vecA.getR(2) - L*round( (vecB.getR(2)-vecA.getR(2)) / (double) L );
+    return make_tuple(x,y,z);
+}
+// return random real number between -1 and 1
+double RND()
+{
+    uniform_real_distribution<double> distribution(-1.0,1.0);
+    return distribution(rng);
+}
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXX  INPUT OUTPUT FUNCTIONS  XXXXXXXXXX
+
+// Head of colsole output
+void ConsoleOutputHead()
+{
+    time_t curtime;
+    std::cout << "SAMC PRIME20 simulation" << endl;
+    std::cout << "No. of chains " << N_CH << ", chain length " << N_AA << ", sequence " << AA_seq << endl;
+    std::cout << "duration T_MAX = " << T_MAX << endl;
+    if(!MEASURE)
+        std::cout << "SAMC run to apprximate ln[g(E)]." << endl;
+    else
+        std::cout << "production run to measure geometric observables." << endl;
+    time(&curtime);
+    std::cout << "start time: " << ctime(&curtime) << endl;
+    
+}
+// creates new chain Chn with N_AA amino acids specified in AA_seq. returns true if successful
+bool newChain(Chain Chn[], int chnNum)
+{
+    AmiAc AAinsert;
+    double rad, ZrotAng, XrotAng;                           // radius for y-z calc, rotation angle
+    double variaMtrx[3];                                    // variable matrix for side chain
+    double ZrotMtrx[3][3], XrotMtrx[3][3];                  // rotation matrix around Z and X axis
+    double tranVec[3], newpos[3], preRot[3], postRotZ[3];    // translation vector, new position after translation, coord. before rotation, coord. after rotation
+
+    Chn[chnNum].setChnNo(chnNum);
+    Chn[chnNum].AmAc.clear();
+    for (int i=0; i<N_AA; i++) {                            // converting char sequence to int sequence
+        AAinsert.Setup(AA_seq, i);
+        Chn[chnNum].AmAc.push_back(AAinsert);
+    }
+
+        // rotation matrix around Z axis
+    ZrotAng = ANGL_NCaC + ANGL_CNCa - ANGL_CaCN - M_PI;
+    ZrotMtrx[0][0] = cos(ZrotAng);
+    ZrotMtrx[0][1] = -sin(ZrotAng);
+    ZrotMtrx[0][2] = 0.0;
+    ZrotMtrx[1][0] = sin(ZrotAng);
+    ZrotMtrx[1][1] = cos(ZrotAng);
+    ZrotMtrx[1][2] = 0.0;
+    ZrotMtrx[2][0] = 0.0;
+    ZrotMtrx[2][1] = 0.0;
+    ZrotMtrx[2][2] = 1.0;
+        // rotation matrix around X axis
+    XrotAng = 11.0*M_PI/10.0;
+    XrotMtrx[0][0] = 1.0;
+    XrotMtrx[0][1] = 0.0;
+    XrotMtrx[0][2] = 0.0;
+    XrotMtrx[1][0] = 0.0;
+    XrotMtrx[1][1] = cos(XrotAng);
+    XrotMtrx[1][2] = -sin(XrotAng);
+    XrotMtrx[2][0] = 0.0;
+    XrotMtrx[2][1] = sin(XrotAng);
+    XrotMtrx[2][2] = cos(XrotAng);
+        // translation vector
+    tranVec[0] = - (BND_NCa-BND_CaC*cos(ANGL_NCaC) + BND_CN*cos(ANGL_CaCN-ANGL_NCaC));
+    tranVec[1] = - (BND_CaC*sin(ANGL_NCaC) + BND_CN*sin(ANGL_CaCN-ANGL_NCaC));
+    tranVec[2] = - 0.0;
+
+    for(int i = 0; i < N_AA; i++) {
+        // relocation of existing chain
+        if( i != 0 ) {
+            // translation + double rotation
+            for(int j = 0; j < i; j++) {            // amino acid
+                for(int k = 0; k < 4; k++) {        // bead
+                    for(int m = 0; m < 3; m++) {    // coordinate
+                        preRot[m] = Chn[chnNum].AmAc[j].Bd[k].getR(m) + tranVec[m];            // translation
+                    }
+                    for(int n = 0; n < 3; n++) {    // coordinate
+                        postRotZ[n] = preRot[0]*ZrotMtrx[n][0] + preRot[1]*ZrotMtrx[n][1] + preRot[2]*ZrotMtrx[n][2];       // rotation around Z axis
+                    }
+                    for(int n = 0; n < 3; n++) {
+                        newpos[n] = postRotZ[0]*XrotMtrx[n][0] + postRotZ[1]*XrotMtrx[n][1] + postRotZ[2]*XrotMtrx[n][2];   // rotation around X axis
+                    }
+                    Chn[chnNum].AmAc[j].Bd[k].setR(newpos[0], newpos[1], newpos[2]);
+                }
+            }
+        }
+        // amino acid construction
+            // backbone
+        Chn[chnNum].AmAc[i].Bd[0].setR(0.0,0.0,0.0);
+        Chn[chnNum].AmAc[i].Bd[1].setR(BND_NCa, 0.0, 0.0);
+        Chn[chnNum].AmAc[i].Bd[2].setR(BND_NCa-BND_CaC*cos(ANGL_NCaC), BND_CaC*sin(ANGL_NCaC), 0.0);
+
+            // side chain
+        rad = Chn[chnNum].AmAc[i].getDisR(1)*sin(Chn[chnNum].AmAc[i].getAng(0));
+        variaMtrx[0] = BND_NCa - Chn[chnNum].AmAc[i].getDisR(1)*cos(Chn[chnNum].AmAc[i].getAng(0));
+        variaMtrx[1] = (    (variaMtrx[0]-Chn[chnNum].AmAc[i].Bd[2].getR(0))*(variaMtrx[0]-Chn[chnNum].AmAc[i].Bd[2].getR(0)) +         // (x - xC)^2
+                            Chn[chnNum].AmAc[i].Bd[2].getR(1)*Chn[chnNum].AmAc[i].Bd[2].getR(1) + rad*rad -                             // + yC^2 + r^2
+                            Chn[chnNum].AmAc[i].getDisR(2)*Chn[chnNum].AmAc[i].getDisR(2) )                                             // - CR^2
+                            / ( 2*Chn[chnNum].AmAc[i].Bd[2].getR(1) );                                                          // / 2*yC
+        variaMtrx[2] = sqrt( rad*rad - variaMtrx[1]*variaMtrx[1] );
+
+        Chn[chnNum].AmAc[i].Bd[3].setR(variaMtrx[0], variaMtrx[1], variaMtrx[2]);
+    }
+    // move polymer to positive coordinates = apply periodic boundary conditions
+    for(int i = 0; i < N_AA; i++) {
+        for(int j = 0; j < 4; j++) {
+            for( int k=0; k<3; k++ ) {
+                Chn[chnNum].AmAc[i].Bd[j].addBC(k, floor(Chn[chnNum].AmAc[i].Bd[j].getR(k)/L ));
+            }
+            Chn[chnNum].AmAc[i].Bd[j].setR(Chn[chnNum].AmAc[i].Bd[j].getR(0) - L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(0)/L), Chn[chnNum].AmAc[i].Bd[j].getR(1) - L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(1)/L), Chn[chnNum].AmAc[i].Bd[j].getR(2) - L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(2)/L));
+                
+        }
+    }
+    // create neighbour list
+    for( int i=0; i<N_AA; i++ ) {
+        for ( int j=0; j<4; j++ ) {
+            Chn[chnNum].AmAc[i].Bd[j].setBox(assignBox(Chn[chnNum].AmAc[i].Bd[j]));
+        }
+    }
+    for(int i = chnNum*N_AA; i < (chnNum+1)*N_AA; i++) {
+        for(int j = 0; j < 4; j++) {
+            LinkListInsert(Chn, i, j);
+        }
+    }
+
+    return true;
+}
+// read chain config from file
+bool readCoord(Chain Chn[], string inputFile)
+{
+    AmiAc AAinsert;
+    ifstream input;
+    double distV[3], newposBC[3];
+    double x, y, z;
+    string ID;
+    int i = 0;
+    int NaaFile;
+
+    input.open(inputFile);
+    if( input.is_open() ) {
+        std::cout << "reading coordiates from input file '" << inputFile << "'" << std::endl;
+        for( int j=0; j<N_CH; j++ ) {
+            Chn[j].setChnNo(j);
+            Chn[j].AmAc.clear();
+            for( int k=0; k<N_AA; k++ ) {
+                AAinsert.Setup(AA_seq, k);
+                Chn[j].AmAc.push_back(AAinsert);
+            }
+        }
+        //getline( input, line );
+        input >> NaaFile; input.ignore();
+        while( input.good() && !input.eof() ) {
+            input.ignore(3);
+            input >> x >> y >> z;
+
+            //std::cout << "Chn[" << (i/4)/N_AA << "].AmAc[" << (i/4)%N_AA << "].Bd[" << i%4 << "]\t" << x << "\t" << y << "\t" << z << endl;
+
+            //if(i%N_AA == 0) 
+            Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setR(x, y, z);
+            input.ignore();
+            i++;
+            if(i == NaaFile) { break; }
+        }
+        if(i != N_CH*N_AA*4) {
+            std::cout << "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << N_AA*4 << std::endl;
+        }
+
+        // PBC
+        for( int i=0; i<N_CH*N_AA*4; i++ ) {
+            for( int k=0; k<3; k++ ) {
+                Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setBC(k, floor(Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k) / L) );
+                newposBC[k] = Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k) - L*floor(Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k)/(double)L);
+            }
+            Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setR(newposBC[0], newposBC[1], newposBC[2]);
+        }
+
+        // create neighbour list
+        for( int i=0; i<N_CH*N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox( assignBox(Chn[i/N_AA].AmAc[i%N_AA].Bd[j]) );
+            }
+        }
+        for( int i=0; i<N_CH*N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                LinkListInsert(Chn, i, j);
+            }
+        }
+        input.close();
+        return true;
+    }
+    else {
+        std::cerr << "unable to open coordinate input file '" << inputFile << "'" << endl;
+        return false;
+    }
+}
+// reads lngE, H, gammasum, and t from input file
+bool readInputFile(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum)
+{
+    ifstream input;
+    stringstream ss_line;
+    std::string s_line, s_token;
+    char delim = ' ';
+    int num;
+    double Ebin1, Ebin2;
+
+    input.open(inputFile);
+    if( input.is_open() ) {
+        std::cout << "reading lngE, H, tcont and gammasum from input file '" << inputFile << "'" << std::endl;
+        while( true ) {
+            getline( input, s_line);
+            if( s_line.length() == 0 ) {
+                std::cout << "ERROR: encountered EOF inside input file head" << std::endl;
+                return false;
+            }
+            if(s_line[0] == '#') {
+                ss_line.str(s_line);
+                getline(ss_line, s_token, delim);
+                getline(ss_line, s_token, delim);
+                if( s_token.length() == 0 ) continue;
+                if( s_token.compare("number") == 0 ) {
+                    getline(ss_line,s_token, delim);
+                    getline(ss_line,s_token, delim);
+                    getline(ss_line,s_token, delim);
+                    getline(ss_line,s_token, delim);
+                    tcont = stoi(s_token, nullptr);
+                    std::cout << "  continue after step " << tcont << std::endl;
+                }
+                else if( s_token.compare("gammasum") == 0 ) {
+                    getline(ss_line, s_token, delim);
+                    getline(ss_line, s_token, delim);
+                    gammasum = stod(s_token, nullptr);
+                    std::cout << "  with gammasum = " << gammasum << std::endl;
+                }
+            }
+            else break;
+        }
+        if( s_line[0] != 'b' ) {
+            std::cout << "Aaaaaarg! What a terrible misfortune came upon us in these miserable times of pain and agony?" << std::endl << "also expected 'bin' at start of line. Instead '" << s_line << "' was read" << std::endl;
+            input.close();
+            return false;
+        }
+        for( int i=0; i<NBin; i++ ) {
+            if( input.good() ) {
+                input >> num >> Ebin1 >> Ebin2 >> lngE[i] >> H[i];
+                if( num != i ) {
+                    std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
+                    input.close();
+                    return false;
+                }
+                std::cout << "  " << i << " " << lngE[i] << std::endl;
+            }
+            else {
+                std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << NBin-1 << std::endl;
+                input.close();
+                return false;
+            }
+        }
+        input.close();
+        return true;
+    }
+
+    std::cout << "unable to open input file '" << inputFile << "'" << std::endl;
+    return false;
+}
+// reads lngE data from file
+bool extra_lngE(string inputFile, double lngE[])
+{
+    ifstream input;
+    std::string s_line;
+    int num;
+    long unsigned int H;
+    double Ebin1, Ebin2;
+
+    input.open(inputFile);
+    if( input.is_open() ) {
+        std::cout << "reading extra lngE from input file '" << inputFile << "'" << std::endl;
+        getline(input, s_line);
+        if(s_line[0] != 'b') {
+            std::cout << "unexpected character at start of line in file '" << inputFile << "': expected 'b', instead '" << s_line[0] << std::endl;
+            input.close();
+            return false;
+        }
+        for( int i=0; i<NBin; i++ ) {
+            if( input.good() ) {
+                input >> num >> Ebin1 >> Ebin2 >> lngE[i] >> H;
+                if( num != i ) {
+                    std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
+                    input.close();
+                    return false;
+                }
+            }
+            else {
+                std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << NBin-1 << std::endl;
+                input.close();
+                return false;
+            }
+        }
+        input.close();
+        return true;
+    }
+
+    std::cout << "unable to open input file '" << inputFile << "'" << std::endl;
+    return false;
+}
+// writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)
+bool outputPositions(Chain Chn[], string name, int mode)
+{
+    ofstream Checkpos;
+    if(mode == 0) {
+        Checkpos.open(name, ios::out);
+    }
+    else {
+        Checkpos.open(name, ios::app);
+    }
+    if( Checkpos.is_open() ) {
+        Checkpos << N_CH*N_AA*4 << std::endl;
+
+        for( int i=0; i<N_CH*N_AA; i++ ) {
+            Checkpos << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(2)*L << endl;
+            Checkpos << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(2)*L << endl;
+            Checkpos << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(2)*L << endl;
+            Checkpos << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(2)*L << endl;
+        }
+
+        Checkpos << std::endl;
+        Checkpos.close();
+        return true;
+    }
+    else {
+        std::cerr << "error opening " << name << endl;
+        return false;
+    }
+}
+// writes backup file in SAMC run
+bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E)
+{
+    std::ostringstream oss;
+    oss << "SAMCbackup_" << t/T_WRITE << ".dat";
+    string name = oss.str();
+    ofstream backup;
+    backup.open(name);
+    if( backup.is_open() ) {
+        backup << "# SAMC DoS of " << N_CH << " PRIME20 " << N_AA << "-mer(s)" << endl;
+        backup << "# sequence " << AA_seq << endl;
+        backup << "# number of MC steps: " << t+1 << ", with " << nstep << " moves per step" << endl;
+        backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << endl;
+        backup << "# gamma_0 = " << GAMMA_0 << ", constant until T_0 = " << T_0 << endl;
+        backup << "# current runtime: " << Timer.curRunTime() << endl;
+        backup << "# energy window: [" << EMin << ";" << EMax << "] in " << NBin << " steps (bin width = " << BinW << ")" << endl;
+        backup << "# accepted " << naccept[0] << " of " << nattempt[0] << " (" << 100*(double)naccept[0]/(double)nattempt[0] << "%) local moves" << endl;
+        backup << "# accepted " << naccept[1] << " of " << nattempt[1] << " (" << 100*(double)naccept[1]/(double)nattempt[1] << "%) pivot (Phi) moves" << endl;
+        backup << "# accepted " << naccept[2] << " of " << nattempt[2] << " (" << 100*(double)naccept[2]/(double)nattempt[2] << "%) pivot (Psi) moves" << endl;
+        backup << "# accepted " << naccept[3] << " of " << nattempt[3] << " (" << 100*(double)naccept[3]/(double)nattempt[3] << "%) translation moves" << endl;
+        backup << "bin  from  to  lng  H" << endl;
+        for( int i=0; i<NBin; i++ ) {
+            backup << i << " " << EMin+i*BinW << " " << EMin+(i+1)*BinW << " " << lngE[i] << " " << H[i] << endl;
+        }
+        backup << "# current configuration ( E=" << E << ")" << endl;
+        backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
+        for( int i=0; i<N_CH*N_AA; i++ ) {
+            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(2) << endl;
+        }
+        backup.close();
+        return true;
+    }
+    else {
+        std::cout << endl << "error opening " << name << std::endl;
+        return false;
+    }
+}
+bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[])
+{
+    std::ostringstream oss;
+    oss << "results_" << t/T_WRITE << ".dat";
+    string name = oss.str();
+    ofstream results;
+    results.open(name);
+    if( results.is_open() ) {
+        results << "# Observables for " << N_CH << " PRIME20 " << N_AA << "-mer(s)" << std::endl;
+        results << "# sequence " << AA_seq << std::endl;
+        results << "# number of MC steps: " << t+1 << ", with " << nstep << " moves per step" << std::endl;
+        results << "# current runtime: " << Timer.curRunTime() << std::endl;
+        results << "# energy window: [" << EMin << ";" << EMax << "] in " << NBin << " steps (bin width = " << BinW << ")" << std::endl;
+        results << "# measured observables are:" << std::endl;
+        results << "\tvisit histogram H" << std::endl;
+        if(HB_CONTMAT)   { results << "#\tHB contact matrices (file HBmat.dat)" << std::endl; }
+        if(WRITE_CONFIG) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
+        results << "Bin from to H" << std::endl;
+        for( int i=0; i<NBin; i++ ) {
+            results << i << " " << EMin+i*BinW << " " <<EMin+(i+1)*BinW << " " << H[i] << std::endl;
+        }
+        results.close();
+        return true;
+    }
+    else {
+        std::cout << endl << "error opening " << name << std::endl;
+        return false;
+    }
+}
+// returns true and updates HBList if H-Bond between N(iN) and C(iC) is formed. iN is index of h*N_C+i
+bool HBcheck(Chain Chn[], int iN, int iC)
+{
+    double distV[3];                                        // distance vector
+    double dist2;                                           // distance squared
+    double nh[3], co[3], ho[3], h1[3], h2[3], rot_n[3];     // vector projections for angle calculation and helping vectors
+    double nhl, col, hol, adl, nho, coh;                    // absolutes of vector projections
+    double cos_a, sin_a, rot_nl;                            // angle/vector for chain end rotation matrix
+    double rotMtrx[3][3];                                   // rotation matrix for chain end nh co calculation
+
+    // condition 1:     N and C separated by at least 3 amino acids and within relevant distance
+    if( NCDist[iN][iC] < 0 ) { return false; }
+    if( (iN/N_AA == iC/N_AA) && (abs(iN-iC) < 4) ) { return false; }
+
+    // condition 2:     distance < SW radius
+    if( NCDist[iN][iC] < SW2_BB ) {
+        // condition 3:     both partners are available
+        if( HBList[iN][0] == -1 && HBList[iC][1] == -1 ) {
+            // condition 4:     constraints of distances to neighbours of partner (HB stabilisation)
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1]);
+            if( dotPro(distV, distV) < DIA2_HB_NCa ) {return false; }
+            if( (iC+1)%N_AA != 0 ) {
+                std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iC/N_AA].AmAc[(iC+1)%N_AA].Bd[0]);
+                if( dotPro(distV, distV) < DIA2_HB_NN ) { return false; }
+            }
+            if( iN%N_AA != 0 ) {
+                std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+                if( dotPro(distV, distV) < DIA2_HB_CC ) { return false; }
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+            if( dotPro(distV, distV) < DIA2_HB_CCa ) { return false; }
+
+            // condition 5:     calculate H and O positions and check if angle is within range (120°,180°)
+            // H
+            if( iN%N_AA == 0 ) {     // NH vector is calculated by rotating NCa in NCaC plane by angle 2.668
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[2]);
+                cos_a = -0.456; sin_a = 0.89;
+                std::tie(rot_n[0], rot_n[1], rot_n[2]) = crossPro( h2, h1);
+                rot_nl = absVec(rot_n);
+                rot_n[0] /= rot_nl; rot_n[1] /= rot_nl; rot_n[2] /= rot_nl;
+                rotMtrx[0][0] = cos_a + rot_n[0]*rot_n[0]*( 1-cos_a );
+                rotMtrx[0][1] = rot_n[0]*rot_n[1]*( 1-cos_a ) - rot_n[2]*sin_a;
+                rotMtrx[0][2] = rot_n[0]*rot_n[2]*( 1-cos_a ) + rot_n[1]*sin_a;
+                rotMtrx[1][0] = rot_n[1]*rot_n[0]*( 1-cos_a ) + rot_n[2]*sin_a;
+                rotMtrx[1][1] = cos_a + rot_n[1]*rot_n[1]*( 1-cos_a );
+                rotMtrx[1][2] = rot_n[1]*rot_n[2]*( 1-cos_a ) - rot_n[0]*sin_a;
+                rotMtrx[2][0] = rot_n[2]*rot_n[0]*( 1-cos_a ) - rot_n[1]*sin_a;
+                rotMtrx[2][1] = rot_n[2]*rot_n[1]*( 1-cos_a ) + rot_n[0]*sin_a;
+                rotMtrx[2][2] = cos_a + rot_n[2]*rot_n[2]*( 1-cos_a );
+                for( int i=0; i<3; i++ ) {
+                    nh[i] = h1[0]*rotMtrx[0][i] + h1[1]*rotMtrx[1][i] + h1[2]*rotMtrx[2][i];
+                }
+                nhl = absVec(nh);
+                nh[0] /= nhl; nh[1] /= nhl; nh[2] /= nhl;
+            }
+            else {
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0]);
+                adl = (dotPro(h1, h2)) / (dotPro(h1, h1));
+                for( int i=0; i<3; i++ ) {
+                    nh[i] = Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i) - Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2].getR(i)-h1[i]*adl - L*round( (Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i) - Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2].getR(i)-h1[i]*adl) / (double)L );
+                }
+                nhl = sqrt(dotPro(nh, nh));
+                nh[0] /= nhl;   nh[1] /= nhl;   nh[2] /= nhl;
+            }
+            // O
+            if( (iC+1)%N_AA == 0 ) {       // CO vector is calculated by rotating CaC in NCaC plane by angle 2.622
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[0], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1]);
+                cos_a = 0.497; sin_a = -0.868;
+                std::tie(rot_n[0], rot_n[1], rot_n[2]) = crossPro( h2, h1);
+                rot_nl = absVec(rot_n);
+                rot_n[0] /= rot_nl; rot_n[1] /= rot_nl; rot_n[2] /= rot_nl;
+                rotMtrx[0][0] = cos_a + rot_n[0]*rot_n[0]*( 1-cos_a );
+                rotMtrx[0][1] = rot_n[0]*rot_n[1]*( 1-cos_a ) - rot_n[2]*sin_a;
+                rotMtrx[0][2] = rot_n[0]*rot_n[2]*( 1-cos_a ) + rot_n[1]*sin_a;
+                rotMtrx[1][0] = rot_n[1]*rot_n[0]*( 1-cos_a ) + rot_n[2]*sin_a;
+                rotMtrx[1][1] = cos_a + rot_n[1]*rot_n[1]*( 1-cos_a );
+                rotMtrx[1][2] = rot_n[1]*rot_n[2]*( 1-cos_a ) - rot_n[0]*sin_a;
+                rotMtrx[2][0] = rot_n[2]*rot_n[0]*( 1-cos_a ) - rot_n[1]*sin_a;
+                rotMtrx[2][1] = rot_n[2]*rot_n[1]*( 1-cos_a ) + rot_n[0]*sin_a;
+                rotMtrx[2][2] = cos_a + rot_n[2]*rot_n[2]*( 1-cos_a );
+                for( int i=0; i<3; i++ ) {
+                    co[i] = h1[0]*rotMtrx[0][i] + h1[1]*rotMtrx[1][i] + h1[2]*rotMtrx[2][i];
+                }
+                col = absVec(co);
+                co[0] *= ((1.2)/col); co[1] *= ((1.2)/col); co[2] *= ((1.2)/col);
+            }
+            else {
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[(iC+1)%N_AA].Bd[0]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+                adl = (dotPro(h1, h2)) / (dotPro(h1, h1));
+                for( int i=0; i<3; i++ ) {
+                    co[i] = Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i) - Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1].getR(i)-h1[i]*adl - L*round( (Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i) - Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1].getR(i)-h1[i]*adl) / (double)L );
+                }
+                col = sqrt(dotPro(co, co));
+                co[0] *= (1.2)/col;   co[1] *= (1.2)/col;   co[2] *= (1.2)/col;
+            }
+            for( int i=0; i<3; i++ ) {
+                ho[i] = Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i)+co[i] - Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i)-nh[i] - L*round( (Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i)+co[i] - Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i)-nh[i]) / (double)L );
+            }
+            hol = sqrt(dotPro(ho, ho));
+            // cosinus calculation
+            nho = -dotPro(nh, ho)/hol;              // NH distance is 1
+            coh = dotPro(co, ho)/(1.2*hol);         // CO distance is 1.2
+
+            if( nho <= -0.5 && coh <= -0.5 ) {      // both angles have to be between 120° and 180°
+                HBList[iN][0] = iC;
+                HBList[iC][1] = iN;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXXXX  ENERGY FUNCTIONS  XXXXXXXXXXXXX
+
+// energy of a single SC interaction between AmAc[i1] and AmAc[i2]. distance d has to be squared
+double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq)
+{
+    if(h1==h2) {
+        if( (h1 == h2) && (abs(i1-i2) < 2) ) return 0;
+    }
+    if(d_sq <= SWDia(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2]) * SWDia(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2])) {
+        return SWDepth(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2]);
+    }
+    return 0;
+}
+// SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch)
+{
+    int neighBox[3], centrBox[3];
+    int searchBox, index;
+    int Box, dbx, dby, dbz;
+    double distV[3];
+    double dist2;
+    double energy = 0;
+
+    if( EOswitch == 1 && j1 != 3 ) { std::cout << "ERROR - EO_SegBead() energy calculation for j1=" << j1 << endl; return -1; }
+
+    Box = assignBox(Chn[h1].AmAc[i1].Bd[j1]);
+    centrBox[0] = Box % NBOX;
+    centrBox[1] = (Box/NBOX) % NBOX;
+    centrBox[2] = Box/(double)(NBOX*NBOX);
+    for( int i=0; i<27; i++ ) {
+        dbx = i%3; dby = (i/3)%3; dbz = i/9;
+        neighBox[0] = (centrBox[0] + dbx-1 + NBOX) % NBOX;
+        neighBox[1] = (centrBox[1] + dby-1 + NBOX) % NBOX;
+        neighBox[2] = (centrBox[2] + dbz-1 + NBOX) % NBOX;
+        searchBox = neighBox[0] + neighBox[1]*NBOX + neighBox[2]*NBOX*NBOX;
+        index = neighHead[searchBox];
+        while( index != -1 ) {
+            if( EOswitch == 0 ) {       // overlapp check
+                if( index/4 == h1*N_AA+i1 ) {
+                    index = neighList[index];
+                    continue;
+                }
+                if( index >= sp*4 && index < ep*4 ) {
+                    std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*N_AA)].AmAc[(index/4)%N_AA].Bd[index%4]);
+                    dist2 = dotPro(distV, distV);
+                    if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*N_AA), (index/4)%N_AA, index%4) ) { 
+                        //std::cerr << "overlapp: C" << h1 << "A" << i1 << "B" << j1 << " - C" << index/(4*N_AA) << "A" << (index/4)%N_AA << "B" << index%4 << std::endl;
+                        return -1.0; 
+                    }
+                }
+            }
+            else {                      // energy calculation
+                if( index%4 == 3 ) {
+                    if( index >= sp*4 && index < ep*4 ) {
+                        std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*N_AA)].AmAc[(index/4)%N_AA].Bd[index%4]);
+                        dist2 = dotPro(distV, distV);
+                        energy += E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2);
+
+                        /*if( E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2) != 0.0 ) {
+                            std::cerr << endl << "energy contribution " << h1*N_AA+i1 << "  and " << index/4 << "   E = " << E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2) << endl;
+                        }*/
+
+                    }
+                }
+            }
+            index = neighList[index];
+        }
+    }
+    return energy;
+}
+// SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
+double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch) 
+{
+    double dEnergy;
+    double energy = 0;
+
+    for( int i=sp1; i<ep1; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            if( EOswitch == 1 && j != 3) continue;  // skip energy calculation for non-SC beads
+            dEnergy = EO_SegBead(Chn, i/N_AA, i%N_AA, j, sp2, ep2, EOswitch);
+            if( dEnergy == -1 ) return -1;          // exit if overlapp check fails
+            energy += dEnergy;
+        }
+    }
+
+    return energy;
+}
+// calculates total energy from scratch
+double E_check(Chain Chn[])
+{
+    int HBL_check[N_CH*N_AA][2], HBerrN[N_CH*N_AA][2], HBerrC[N_CH*N_AA][2];
+    double NCD_check[N_CH*N_AA][N_CH*N_AA];
+    double Energy, distabs;
+    double distV[3];
+
+    // create new HBList → HBL_check
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        HBL_check[i][0] = HBList[i][0];
+        HBL_check[i][1] = HBList[i][1];
+        HBList[i][0] = -1;
+        HBList[i][1] = -1;
+        for( int j=0; j<N_CH*N_AA; j++ ) {
+            if( (i/N_AA == j/N_AA) && (abs(i-j) < 4) ) {
+                NCD_check[i][j] = -1.0;
+                continue;
+            }
+            NCD_check[i][j] = NCDist[i][j];
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+            distabs = dotPro(distV, distV);
+            if( distabs < SW2HUGE ) {
+                NCDist[i][j] = distabs;
+            }
+            else {
+                NCDist[i][j] = -1.0;
+            }
+        }
+    }
+    // energy calculation
+    Energy = 0.0;
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        for( int j=0; j<N_CH*N_AA; j++ ) {
+            if( HBcheck(Chn, i, j) ) { 
+                Energy -= 1.0; 
+            }
+        }
+        Energy += EO_SegBead( Chn, i/N_AA, i%N_AA, 3, i, N_CH*N_AA, 1);
+    }
+    // disagreements between HBList and HBL_check
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        if( HBL_check[i][0] != HBList[i][0] ) { 
+            HBerrN[i][0] = HBList[i][0];
+            HBerrN[i][1] = HBL_check[i][0];
+        }
+        else { HBerrN[i][0] = -1; HBerrN[i][1] = -1; }
+        if( HBL_check[i][1] != HBList[i][1] ) {
+            HBerrC[i][0] = HBList[i][1];
+            HBerrC[i][1] = HBL_check[i][1];
+        }
+        else { HBerrC[i][0] = -1; HBerrC[i][1] = -1; }
+    }
+    // if multiple HB partners are possible, this does not affect Energy but is still listet as error
+    // this should not lead to an error message, thus this is corrected below
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        if( HBerrN[i][0] > -1 && HBerrN[i][1] > -1 ) {
+            if( HBerrC[HBerrN[i][0]][1] == -1 && HBerrC[HBerrN[i][1]][0] == -1 ) {
+                HBerrC[HBerrN[i][0]][0] = -1;
+                HBerrC[HBerrN[i][1]][1] = -1;
+                HBerrN[i][0] = -1;
+                HBerrN[i][1] = -1;
+            }
+        }
+        if( HBerrC[i][0] > -1 && HBerrC[i][1] > -1 ) {
+            if( HBerrN[HBerrC[i][0]][1] == -1 && HBerrN[HBerrC[i][1]][0] == -1 ) {
+                HBerrN[HBerrC[i][0]][0] = -1;
+                HBerrN[HBerrC[i][1]][1] = -1;
+                HBerrC[i][0] = -1;
+                HBerrC[i][1] = -1;
+            }
+        }
+    }
+    // error messages and HBList reset
+    for( int i=0; i<N_CH*N_AA; i++ ) {
+        if( HBerrN[i][0] > -1 || HBerrN[i][1] > -1 ) {
+            std::cout << "\n\tHB mismatch detected → N: check " << i << "-" << HBerrN[i][0] << " and running " << i << "-" << HBerrN[i][1] << endl;
+        }
+        if( HBerrC[i][0] > -1 || HBerrC[i][1] > -1 ) {
+            std::cout << "\n\tHB mismatch detected → C: check " << i << "-" << HBerrC[i][0] << " and running " << i << "-" << HBerrC[i][1] << endl;
+        }
+        HBList[i][0] = HBL_check[i][0];
+        HBList[i][1] = HBL_check[i][1];
+        for( int j=0; j<N_CH*N_AA; j++ ) {
+            if( abs(NCD_check[i][j] - NCDist[i][j]) > 0.01 ) {
+                std::cout << endl << "\tN-" << i << " C-" << j << " dist² mismatch:  newly calculated d²=" << NCDist[i][j] << " running value d²=" << NCD_check[i][j] << endl;
+            }
+            NCDist[i][j] = NCD_check[i][j];
+        }
+    }
+
+    return Energy;
+}
+// SAMC acceptance function
+bool acceptance(double lngEold, double lngEnew)
+{
+    uniform_real_distribution<double> distribution(0,1);
+
+    // biased moves? logEo -= gammasum*pio → ask Arne and Timur
+    double MCrand = distribution(rng);
+    //std::cout << endl << "lngEold=" << lngEold << " lngEnew=" << lngEnew << " exp(lngEnew-lngEold)=" << exp(lngEold-lngEnew) << " MCrand=" << MCrand;
+    if( lngEnew <= lngEold ) return true;
+    if( exp(lngEold-lngEnew) > MCrand ) return true;
+    return false;
+}
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXXXXX  MOVE FUNCTIONS  XXXXXXXXXXXXXX
+
+// small displacement of Chn[h].AmAc[i].Bd[j]
+bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
+{
+    Bead cpy;                       // copy of bead to be wiggled, wiggled bead
+    double disp[3], dist[3];        // random displacement vector, distance vector
+    double newx, newy, newz;        // new coordinates for wiggled bead
+    double Eold, distabs;
+    int HBN_broken, HBC_broken, HBEnd_broken;
+
+    // calculate old energy contribution of SC if j==3
+    if( j == 3 ) {
+        Eold = EO_SegBead(Chn, h, i, j, 0, N_AA*N_CH, 1);
+    }
+    
+    // calculate displacement vector (disp[]) and move bead
+    cpy = Chn[h].AmAc[i].Bd[j];
+    for(int k = 0; k < 3; k++) {
+        disp[k] = DISP_MAX * RND();
+    }
+    newx = Chn[h].AmAc[i].Bd[j].getR(0) + disp[0];  Chn[h].AmAc[i].Bd[j].addBC(0, floor(newx/L));   newx = newx - L*floor(newx/L);
+    newy = Chn[h].AmAc[i].Bd[j].getR(1) + disp[1];  Chn[h].AmAc[i].Bd[j].addBC(1, floor(newy/L));   newy = newy - L*floor(newy/L);
+    newz = Chn[h].AmAc[i].Bd[j].getR(2) + disp[2];  Chn[h].AmAc[i].Bd[j].addBC(2, floor(newz/L));   newz = newz - L*floor(newz/L);
+    Chn[h].AmAc[i].Bd[j].setR( newx, newy, newz );
+    // check all bond lengths: if outside allowed range => reject move.
+    switch(j) {
+        case 0:
+            if (i>0) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
+                if( abs(absVec(dist)/PBND_CaN - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
+                if( abs(absVec(dist)/BND_CN - 1) > BND_FLUCT )          { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            if( abs(absVec(dist)/BND_NCa - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            if( abs(absVec(dist)/PBND_NC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(0) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            break;
+        case 1:
+            if (i>0) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
+                if( abs(absVec(dist)/PBND_CaCa - 1) > BND_FLUCT )       { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
+                if( abs(absVec(dist)/PBND_CCa - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            if( abs(absVec(dist)/BND_NCa - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            if( abs(absVec(dist)/BND_CaC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(1) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            if (i<N_AA-1) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
+                if( abs(absVec(dist)/PBND_CaN - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
+                if( abs(absVec(dist)/PBND_CaCa - 1) > BND_FLUCT )       { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            }
+            break;
+        case 2:
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            if( abs(absVec(dist)/PBND_NC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            if( abs(absVec(dist)/BND_CaC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(2) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            if (i<N_AA-1) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
+                if( abs(absVec(dist)/BND_CN - 1) > BND_FLUCT )          { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
+                if( abs(absVec(dist)/PBND_CCa - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            }
+            break;
+        case 3:
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(0) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(1) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(2) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
+            break;
+    }
+    // perform overlap check
+    if(EO_SegBead(Chn, h, i, j, 0, N_AA*N_CH, 0) == -1) {
+        Chn[h].AmAc[i].Bd[j] = cpy;
+        return false;
+    }
+    // Break all H-Bonds affected by the move
+    HBN_broken = -1; HBC_broken = -1; HBEnd_broken = -1;
+    switch(j) {
+        case 0:
+            if( HBList[h*N_AA+i][0] > -1 ) {
+                HBN_broken = HBList[h*N_AA+i][0];
+                HBList[HBList[h*N_AA+i][0]][1] = -1;
+                HBList[h*N_AA+i][0] = -1;
+                deltaE += 1.0;
+            }
+            if( i%N_AA != 0 ) {
+                if( HBList[h*N_AA+i-1][1] > -1 ) {
+                    HBC_broken = HBList[h*N_AA+i-1][1];
+                    HBList[HBList[h*N_AA+i-1][1]][0] = -1;
+                    HBList[h*N_AA+i-1][1] = -1;
+                    deltaE += 1.0;
+                }
+            }
+            if( (i+1)%N_AA == 0 ) {
+                if( HBList[h*N_AA+i][1] > -1) {
+                    HBEnd_broken = HBList[h*N_AA+i][1];
+                    HBList[HBList[h*N_AA+i][1]][0] = -1;
+                    HBList[h*N_AA+i][1] = -1;
+                    deltaE += 1.0;
+                }
+            }
+            break;
+        case 1:
+            if( HBList[h*N_AA+i][0] > -1 ) {
+                HBN_broken = HBList[h*N_AA+i][0];
+                HBList[HBList[h*N_AA+i][0]][1] = -1;
+                HBList[h*N_AA+i][0] = -1;
+                deltaE += 1.0;
+            }
+            if( HBList[h*N_AA+i][1] > -1 ) {
+                HBC_broken = HBList[h*N_AA+i][1];
+                HBList[HBList[h*N_AA+i][1]][0] = -1;
+                HBList[h*N_AA+i][1] = -1;
+                deltaE += 1.0;
+            }
+            break;
+        case 2:
+            if( HBList[h*N_AA+i][1] > -1 ) {
+                HBC_broken = HBList[h*N_AA+i][1];
+                HBList[HBList[h*N_AA+i][1]][0] = -1;
+                HBList[h*N_AA+i][1] = -1;
+                deltaE += 1.0;
+            }
+            if( (i+1)%N_AA != 0 ) {
+                if( HBList[h*N_AA+i+1][0] > -1 ) {
+                    HBN_broken = HBList[h*N_AA+i+1][0];
+                    HBList[HBList[h*N_AA+i+1][0]][1] = -1;
+                    HBList[h*N_AA+i+1][0] = -1;
+                    deltaE += 1.0;
+                }
+            }
+            if( i%N_AA == 0 ) {
+                if( HBList[h*N_AA+i][0] > -1 ) {
+                    HBEnd_broken = HBList[h*N_AA+i][0];
+                    HBList[HBList[h*N_AA+i][0]][1] = -1;
+                    HBList[h*N_AA+i][0] = -1;
+                    deltaE += 1.0;
+                }
+            }
+    }
+    // energy calculation
+    switch(j) {
+        case 0:
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                if( (h != k/N_AA) || ((h == k/N_AA) && (abs(h*N_AA+i-k) > 3)) ) {
+                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[0], Chn[k/N_AA].AmAc[k%N_AA].Bd[2]);
+                    distabs = dotPro(dist, dist);
+                    if( distabs < SW2HUGE )    { NCDist[h*N_AA+i][k] = distabs; }
+                    else                        { NCDist[h*N_AA+i][k] = -1; }
+                }
+                if( HBcheck(Chn, h*N_AA+i, k) ) deltaE -= 1.0;
+                if(i>0) { if( HBcheck(Chn, k, h*N_AA+i-1) ) deltaE -= 1.0; }
+                if((i+1)%N_AA == 0) { if(HBcheck(Chn, k, h*N_AA+i)) deltaE -= 1.0; }
+            }
+            break;
+        case 1:
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                if( HBcheck(Chn, h*N_AA+i, k) ) deltaE -= 1.0;
+                if( HBcheck(Chn, k, h*N_AA+i) ) deltaE -= 1.0;
+            }
+            break;
+        case 2:
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                if( (h != k/N_AA) || ((h == k/N_AA) && (abs(h*N_AA+i-k) > 3)) ) {
+                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[2], Chn[k/N_AA].AmAc[k%N_AA].Bd[0]);
+                    distabs = dotPro(dist, dist);
+                    if( distabs < SW2HUGE )    { NCDist[k][h*N_AA+i] = distabs; }
+                    else                        { NCDist[k][h*N_AA+i] = -1; }
+                }
+                if(i==0) { if(HBcheck(Chn, h*N_AA+i, k)) deltaE -= 1.0; }
+                if( HBcheck(Chn, k, h*N_AA+i) ) deltaE -= 1.0;
+                if(i<N_AA-1) { if( HBcheck(Chn, h*N_AA+i+1, k) ) deltaE -= 1.0; }
+            }
+            break;
+        case 3:
+            deltaE += EO_SegBead(Chn, h, i, j, 0, N_CH*N_AA, 1) - Eold;
+    }
+    // previously broken HB can build new HB
+    switch(j) {
+        case 0:
+            if( HBList[h*N_AA+i][0] == HBN_broken ) HBN_broken = -1;
+            if( i == 0 ) break;
+            if( HBList[h*N_AA+i-1][1] == HBC_broken ) HBC_broken = -1;
+            if( i == N_AA-1 ) { if( HBList[h*N_AA+i][1] == HBEnd_broken ) HBEnd_broken = -1; }
+            break;
+        case 1:
+            if( HBList[h*N_AA+i][0] == HBN_broken ) HBN_broken = -1;
+            if( HBList[h*N_AA+i][1] == HBC_broken ) HBC_broken = -1;
+            break;
+        case 2:
+            if( HBList[h*N_AA+i][1] == HBC_broken ) HBC_broken = -1;
+            if( i == N_AA-1 ) break;
+            if( HBList[h*N_AA+i+1][0] == HBN_broken ) HBN_broken = -1;
+            if( i == 0 ) { if( HBList[h*N_AA+i][0] == HBEnd_broken ) HBEnd_broken = -1; }
+    }
+    if( j != 3 ) {
+        if( HBN_broken > -1 ) {
+            for( int k=0; k<N_CH*N_AA; k++ ) {
+                if( HBcheck(Chn, k, HBN_broken) ) deltaE -= 1.0;
+            }
+        }
+        if( HBC_broken > -1 ) {
+            for( int k=0; k<N_AA; k++ ) {
+                if( HBcheck(Chn, HBC_broken, k) ) deltaE -= 1.0;
+            }
+        }
+    }
+    // HBEnd_broken
+    if( i==0 && j==2 ) {
+        for( int k=0; k<N_CH*N_AA; k++ ) {
+            if( HBcheck(Chn, 0, k) ) deltaE -= 1.0;
+        }
+        if( HBEnd_broken > -1 ) {
+            if( HBEnd_broken != HBList[h*N_CH][0] ) {
+                for( int k=0; k<N_CH*N_AA; k++ ) {
+                    if( HBcheck(Chn, k, HBEnd_broken) ) deltaE -= 1.0;
+                }
+            }
+        }
+    }
+    if( i==N_AA-1 && j==0 ) {
+        for( int k=0; k<N_CH*N_AA; k++ ) {
+            if( HBcheck(Chn, k, N_AA-1) ) deltaE -= 1.0;
+        }
+        if( HBEnd_broken > -1 ) {
+            if( HBEnd_broken != HBList[h*N_CH+N_AA-1][1] ) {
+                for( int k=0; k<N_CH*N_AA; k++ ) {
+                    if( HBcheck(Chn, HBEnd_broken, k) ) deltaE -= 1.0;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+// rotation around N-Ca axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
+bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
+{
+    Bead Bdcpy[4*N_AA*N_CH];                                // copy of rotated beads
+    double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
+    double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
+    double rotMtrx[3][3];                                   // rotation matrix
+    double n[3], dVec[3], newpos[3], com[3], shift[3];
+    int BrokenHB[N_AA*N_CH][2], nBHB;                       // list of broken HB
+    int sp, ep, spHB, epHB;                                 // start and end of rotated chain segment
+
+    // calculate Eold
+    sp = (high == 0) ? ((i1/N_AA)*N_AA):i1;                 // identify start of rotated chain segment
+    ep = (high == 0) ? (i1):(((i1/N_AA)+1)*N_AA);           // identify end of rotated chain segment
+    Eold = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1);
+    // copy relevant part of the chain
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            Bdcpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+        }
+    }
+
+    angle = DPHI_MAX*RND();
+    cos_a = cos(angle); sin_a = sin(angle);
+    std::tie(n[0], n[1], n[2]) = distVecBC(Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0], Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1]);  nsqrt = absVec(n);
+    n[0] /= nsqrt;  n[1] /= nsqrt;  n[2] /= nsqrt;
+    if( high==0 ) { n[0] *= -1; n[1] *= -1; n[2] *= -1; }     // -n for low? is this nessessary to keep rotation angle distribution uniform?
+    rotMtrx[0][0] = cos_a + n[0]*n[0]*(1-cos_a);
+    rotMtrx[0][1] = n[0]*n[1]*(1-cos_a) - n[2]*sin_a;
+    rotMtrx[0][2] = n[0]*n[2]*(1-cos_a) + n[1]*sin_a;
+    rotMtrx[1][0] = n[1]*n[0]*(1-cos_a) + n[2]*sin_a;
+    rotMtrx[1][1] = cos_a + n[1]*n[1]*(1-cos_a);
+    rotMtrx[1][2] = n[1]*n[2]*(1-cos_a) - n[0]*sin_a;
+    rotMtrx[2][0] = n[2]*n[0]*(1-cos_a) - n[1]*sin_a;
+    rotMtrx[2][1] = n[2]*n[1]*(1-cos_a) + n[0]*sin_a;
+    rotMtrx[2][2] = cos_a + n[2]*n[2]*(1-cos_a);
+
+    if( high == 0 ) {
+        for( int i=(i1/N_AA)*N_AA; i<i1; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                for( int k=0; k<3; k++ ) {
+                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getBC(k) );
+                }
+                for( int k=0; k<3; k++ ) {
+                    // periodic boundary conditions here and in high.
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getR(k);
+                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = newpos[k] - L*floor(newpos[k]/L);
+                }
+                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                
+                // overlapp check
+                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, (i1/N_AA)*N_AA, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, i1, N_CH*N_AA, 0) == -1 ) {
+                    for( int k=(i/N_AA)*N_AA; k<i+1; k++ ) {
+                        for( int m=0; m<4; m++ ) {
+                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+    else if( high == 1 ) {
+        for( int i=i1; i<((i1/N_AA)+1)*N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                for( int k=0; k<3; k++ ) {
+                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k) + L*( Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) );
+                }
+                for( int k=0; k<3; k++ ) {
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k);
+                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = newpos[k] - L*floor(newpos[k]/L);
+                }
+                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                
+                // overlapp check
+                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, i1, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, ((i1/N_AA)+1)*N_AA, N_CH*N_AA, 0) == -1 ) {
+                    for( int k=i1; k<i+1; k++ ) {
+                        for( int m=0; m<4; m++ ) {
+                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+    else {
+        printf("!ERROR! \trotPhi(): int high has unacceptable value!\n");
+    }
+    // energy calculation
+    // break old HB
+    nBHB = -1;
+    dEhb = 0.0;
+    spHB = (high == 0) ? sp : (sp+1);
+    epHB = (high == 0) ? (ep+1) : ep;
+    for( int i=sp; i<epHB; i++ ) {
+        if( (HBList[i][0] < spHB || HBList[i][0] >= ep) && HBList[i][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i;
+            BrokenHB[nBHB][1] = HBList[i][0];
+            HBList[HBList[i][0]][1] = -1;
+            HBList[i][0] = -1;
+            dEhb += 1.0;
+        }
+        if( (HBList[i][1] < spHB || HBList[i][1] >= ep) && HBList[i][1] > -1 ) {
+            BrokenHB[++nBHB][1] = i;
+            BrokenHB[nBHB][0] = HBList[i][1];
+            HBList[HBList[i][1]][0] = -1;
+            HBList[i][1] = -1;
+            dEhb += 1.0;
+        }
+        // ATTENTION: maybe extra conditions have to be checked like HBList[i1][0] or HBList[i1-1][1] with all possible partners
+    }
+    // close new HB
+    for( int m=sp; m<epHB; m++ ) {
+        for( int n=0; n<N_CH*N_AA; n++ ) {
+            if( n >= spHB && n < ep ) continue;
+            if( (m/N_AA != n/N_AA) || (( m/N_AA == n/N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[0], Chn[n/N_AA].AmAc[n%N_AA].Bd[2]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
+                else                        { NCDist[m][n] = -1; }
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[2], Chn[n/N_AA].AmAc[n%N_AA].Bd[0]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
+                else                        { NCDist[n][m] = -1; }
+            }
+            else {
+                NCDist[m][n] = -1;
+                NCDist[n][m] = -1;
+            }
+            if(HBcheck(Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(Chn, n, m)) dEhb -= 1.0;
+        }
+    }
+    // ATTENTION: extra conditions and situations would have to be applied here as well
+    if( nBHB >= 0 ) {       // previously broken HB can rebond
+        for( int i=0; i<nBHB+1; i++ ) {
+            for( int j=0; j<N_CH*N_AA; j++ ) {
+                if(HBcheck(Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            }
+        }
+    }
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            LinkListUpdate(Chn, i, j);
+        }
+    }
+    // SC interactions
+    deltaE = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1) + dEhb - Eold;
+
+    return true;
+}
+// rotation around Ca-C axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
+bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
+{
+    Bead Bdcpy[4*N_AA*N_CH];                                // copy of rotated beads
+    double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
+    double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
+    double rotMtrx[3][3];                                   // rotation matrix
+    double n[3], dVec[3], newpos[3], com[3], shift[3];
+    int BrokenHB[N_AA*N_CH][2], nBHB;                       // list of broken HB
+    int sp, ep, spHB, epHB;                                 // start and end of rotated chain segment
+
+    // calculate Eold
+    sp = (high == 0) ? ((i1/N_AA)*N_AA):(i1+1);             // identify start of rotated chain segment
+    ep = (high == 0) ? (i1+1):(((i1/N_AA)+1)*N_AA);         // identify end of rotated chain segment
+    Eold = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1);
+    // copy relevant part of the chain
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            Bdcpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+        }
+    }
+
+    angle = DPSI_MAX*RND();
+    cos_a = cos(angle); sin_a = sin(angle);
+    std::tie(n[0], n[1], n[2]) = distVecBC(Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1], Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2]);  nsqrt = absVec(n);
+    n[0] /= nsqrt;  n[1] /= nsqrt;  n[2] /= nsqrt;
+    if( high==0 ) { n[0] = -n[0]; n[1] = -n[1]; n[2] = -n[2]; }     // -n for low? is this nessessary to keep rotation angle distribution uniform?
+    rotMtrx[0][0] = cos_a + n[0]*n[0]*(1-cos_a);
+    rotMtrx[0][1] = n[0]*n[1]*(1-cos_a) - n[2]*sin_a;
+    rotMtrx[0][2] = n[0]*n[2]*(1-cos_a) + n[1]*sin_a;
+    rotMtrx[1][0] = n[1]*n[0]*(1-cos_a) + n[2]*sin_a;
+    rotMtrx[1][1] = cos_a + n[1]*n[1]*(1-cos_a);
+    rotMtrx[1][2] = n[1]*n[2]*(1-cos_a) - n[0]*sin_a;
+    rotMtrx[2][0] = n[2]*n[0]*(1-cos_a) - n[1]*sin_a;
+    rotMtrx[2][1] = n[2]*n[1]*(1-cos_a) + n[0]*sin_a;
+    rotMtrx[2][2] = cos_a + n[2]*n[2]*(1-cos_a);
+
+    if( high == 0 ) {
+        for( int i=(i1/N_AA)*N_AA; i<i1+1; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                for( int k=0; k<3; k++ ) {
+                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) );
+                }
+                for( int k=0; k<3; k++ ) {
+                    // periodic boundary conditions here and in high.
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k);
+                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = newpos[k] - L*floor(newpos[k]/L);
+                }
+                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                
+                // overlapp check
+                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, (i1/N_AA)*N_AA, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, i1, N_CH*N_AA, 0) == -1 ) {
+                    for( int k=(i/N_AA)*N_AA; k<i+1; k++ ) {
+                        for( int m=0; m<4; m++ ) {
+                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+    else if( high == 1 ) {
+        for( int i=i1+1; i<((i1/N_AA)+1)*N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                for( int k=0; k<3; k++ ) {
+                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getBC(k) );
+                }
+                for( int k=0; k<3; k++ ) {
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getR(k);
+                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = newpos[k] - L*floor(newpos[k]/L);
+                }
+                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                
+                // overlapp check
+                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, i1+1, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, ((i/N_AA)+1)*N_AA, N_CH*N_AA, 0 ) ) {
+                    for( int k=i1+1; k<i+1; k++ ) {
+                        for( int m=0; m<4; m++ ) {
+                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+    else {
+        printf("!ERROR! \trotPsi(): int high has unacceptable value!\n");
+    }
+    // energy calculation
+    // break old HB
+    nBHB = -1;          // no. broken HB
+    dEhb = 0.0;         // change in energy due to HB
+    spHB = (high == 0) ? sp : (sp-1);
+    epHB = (high == 0) ? (ep-1) : ep;
+    for( int i=spHB; i<ep; i++ ) {
+        if( (HBList[i][0] <= sp || HBList[i][0] >= epHB) && HBList[i][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i;
+            BrokenHB[nBHB][1] = HBList[i][0];
+            HBList[HBList[i][0]][1] = -1;
+            HBList[i][0] = -1;
+            dEhb += 1.0;
+        }
+        if( (HBList[i][1] <= sp || HBList[i][1] >= ep) && HBList[i][1] > -1 ) {
+            BrokenHB[++nBHB][1] = i;
+            BrokenHB[nBHB][0] = HBList[i][1];
+            HBList[HBList[i][1]][0] = -1;
+            HBList[i][1] = -1;
+            dEhb += 1.0;
+        }
+        // ATTENTION: maybe extra conditions have to be checked like HBList[i1][0] or HBList[i1-1][1] with all possible partners
+    }
+    // close new HB
+    for( int m=spHB; m<ep; m++ ) {
+        for( int n=0; n<N_CH*N_AA; n++ ) {
+            if( n >= sp && n < epHB) continue;
+            if( (m/N_AA != n/N_AA) || (( m/N_AA == n/N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[0], Chn[n/N_AA].AmAc[n%N_AA].Bd[2]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
+                else                        { NCDist[m][n] = -1; }
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[2], Chn[n/N_AA].AmAc[n%N_AA].Bd[0]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
+                else                        { NCDist[n][m] = -1; }
+            }
+            else {
+                NCDist[m][n] = -1;
+                NCDist[n][m] = -1;
+            }
+            if(HBcheck(Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(Chn, n, m)) dEhb -= 1.0;
+        }
+    }
+    // ATTENTION: extra conditions and situations would have to be applied here as well
+    if( nBHB >= 0 ) {       // previously broken HB can rebond
+        for( int i=0; i<nBHB+1; i++ ) {
+            for( int j=0; j<N_CH*N_AA; j++ ) {
+                if(HBcheck(Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            }
+        }
+    }
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            LinkListUpdate(Chn, i, j);
+        }
+    }
+    // SC interactions
+    deltaE = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1) + dEhb - Eold;
+
+    return true;
+}
+// translation move of a whole chain
+bool translation(Chain Chn[], int iChn, double &deltaE)
+{
+    Bead Bdcpy[4*N_AA];                 // copy of beads in moved chain
+    double dVec[3], newpos[3];          // displacement vector, new position (before PBC)
+    double Eold, dEhb, distabs;
+    int BrokenHB[N_AA][2], nBHB;
+
+    for( int i=0; i<N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            Bdcpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
+        }
+    }
+    Eold = EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, 0, iChn*N_AA, 1) + EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, (iChn+1)*N_AA, N_CH*N_AA, 1);
+    for( int i=0; i<3; i++ ) {
+        dVec[i] = RND()*(double)L/2.0;
+    }
+
+    for( int i=0; i<N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            for( int k=0; k<3; k++ ) {
+                newpos[k] = Chn[iChn].AmAc[i].Bd[j].getR(k) + dVec[k];
+                Chn[iChn].AmAc[i].Bd[j].setBC(k, Chn[iChn].AmAc[i].Bd[j].getBC(k) + floor(newpos[k]/L) );
+                newpos[k] = newpos[k] - L*floor(newpos[k]/L);
+            }
+            Chn[iChn].AmAc[i].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+            // overlapp check
+            if( EO_SegBead(Chn, iChn, i, j, 0, iChn*N_AA, 0) == -1 || EO_SegBead(Chn, iChn, i, j, (iChn+1)*N_AA, N_CH*N_AA, 0) == -1 ) {
+                for( int m=0; m<i+1; m++ ) {
+                    for( int n=0; n<4; n++ ) {
+                        Chn[iChn].AmAc[m].Bd[n] = Bdcpy[m*4+n];     // reset chain & exit
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    // energy calculation
+    //break old HB
+    nBHB = -1;
+    dEhb = 0.0;
+    for( int i=iChn*N_AA; i<(iChn+1)*N_AA; i++ ) {
+        if( (HBList[i][0] < iChn*N_AA || HBList[i][0] >= (iChn+1)*N_AA ) && HBList[i][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i;
+            BrokenHB[nBHB][1] = HBList[i][0];
+            HBList[HBList[i][0]][1] = -1;
+            HBList[i][0] = -1;
+            dEhb += 1.0;
+        }
+        if( (HBList[i][1] < iChn*N_AA || HBList[i][1] >= (iChn+1)*N_AA ) && HBList[i][1] > -1 ) {
+            BrokenHB[++nBHB][1] = i;
+            BrokenHB[nBHB][0] = HBList[i][1];
+            HBList[HBList[i][1]][0] = -1;
+            HBList[i][1] = -1;
+            dEhb += 1.0;
+        }
+    }
+    // close new HB
+    for( int i=0; i<N_AA; i++ ) {
+        for( int j=0; j<N_CH*N_AA; j++ ) {
+            if( j/N_AA == iChn ) continue;
+            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[iChn].AmAc[i].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+            distabs = dotPro(dVec, dVec);
+            if( distabs < SW2HUGE ) { NCDist[iChn*N_AA+i][j] = distabs; }
+            else                    { NCDist[iChn*N_AA+i][j] = -1; }
+            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[iChn].AmAc[i].Bd[2], Chn[j/N_AA].AmAc[j%N_AA].Bd[0]);
+            distabs = dotPro(dVec, dVec);
+            if( distabs < SW2HUGE ) { NCDist[j][iChn*N_AA+i] = distabs; }
+            else                    { NCDist[j][iChn*N_AA+i] = -1; }
+            if( HBcheck(Chn, iChn*N_AA+i, j) )  dEhb -= 1.0;
+            if( HBcheck(Chn, j, iChn*N_AA+i) )  dEhb -= 1.0;
+        }
+    }
+    // previously broken HB can rebond
+    if( nBHB > -1 ) {
+        for( int i=0; i<nBHB+1; i++) {
+            for( int j=0; j<N_CH*N_AA; j++ ) {
+                if( HBcheck(Chn, BrokenHB[i][0], j) )   dEhb -= 1.0;
+                if( HBcheck(Chn, j, BrokenHB[i][1]) )   dEhb -= 1.0;
+            }
+        }
+    }
+    for( int i=0; i<N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            LinkListUpdate(Chn, iChn*N_AA+i, j);
+        }
+    }
+
+    deltaE = EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, 0, iChn*N_AA, 1) + EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, (iChn+1)*N_AA, N_CH*N_AA, 1) + dEhb - Eold;
+
+    return true;
+}
+// check all bond lenght from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+bool checkBndLngth(Chain Chn[], int sp, int ep)
+{
+    double distV[3];
+    double dist2;
+    bool res;
+
+    res = true;
+    for( int i=sp; i<ep; i++ ) {
+        if( (i+1)%N_AA != 0 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[1]);
+            if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, BND_NCa, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[2]);
+            if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, PBND_NC, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(0), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[i%N_AA].Bd[2]);
+            if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, BND_CaC, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(1), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[0]);
+            if( abs( absVec(distV) / PBND_CaN - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i+1, PBND_CaN, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[1]);
+            if( abs( absVec(distV) / PBND_CaCa - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i+1, PBND_CaCa, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(2), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[0]);
+            if( abs( absVec(distV) / BND_CN - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i+1, BND_CN, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[1]);
+            if( abs( absVec(distV) / PBND_CCa - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        i, i+1, PBND_CCa, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+        }
+        else {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[1]);
+            if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, BND_NCa, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[2]);
+            if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, PBND_NC, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(0), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[1], Chn[i/N_AA].AmAc[N_AA-1].Bd[2]);
+            if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, BND_CaC, BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[1], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(1), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[2], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(2), BND_FLUCT, absVec(distV) );
+                        res = false;
+            }
+        }
+    }
+
+    return res;
+}
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXX  MAINTENANCE FUNCTIONS  XXXXXXXXXX
+
+// resets the counter of boundary crossings so that the real coordinates move back to the simulation box
+bool resetBCcouter(Chain Chn[]) 
+{
+    double highestBC[3];
+
+    for( int i=0; i<N_CH; i++ ) {
+        highestBC[0] = 0;  highestBC[1] = 0; highestBC[2] = 0;
+        for( int j=0; j<N_AA*4; j++ ) {
+            for( int k=0; k<3; k++ ) {
+                if( abs(Chn[i].AmAc[j/4].Bd[j%4].getBC(k)) > abs(highestBC[k]) ) {
+                    highestBC[k] = Chn[i].AmAc[j/4].Bd[j%4].getBC(k);
+                }
+            }
+        }
+        for( int j=0; j<N_AA*4; j++ ) {
+            //Chn[i].AmAc[j/4].Bd[j%4].setR( Chn[i].AmAc[j/4].Bd[j%4].getR(0) - highestBC[0]*L, Chn[i].AmAc[j/4].Bd[j%4].getR(1) - highestBC[1]*L, Chn[i].AmAc[j/4].Bd[j%4].getR(2) - highestBC[2]*L );
+            for( int k=0; k<3; k++ ) {
+                Chn[i].AmAc[j/4].Bd[j%4].addBC(k, highestBC[k]);
+            }
+        }
+    }
+
+}
+
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXXX  LINK LIST FUNCTIONS  XXXXXXXXXXX
+
+// returns neighbour list box of bead
+int assignBox(Bead Bd) 
+{
+    int xBox, yBox, zBox, Box;
+    xBox = floor(Bd.getR(0) / LBOX);
+    yBox = floor(Bd.getR(1) / LBOX);
+    zBox = floor(Bd.getR(2) / LBOX);
+    Box = zBox*NBOX*NBOX + yBox*NBOX + xBox;
+    return Box;
+}
+// update linked list (neighbour list) -> insert AmAc[i1].Bd[j1]
+int LinkListInsert(Chain Chn[], int i1, int j1)
+{
+    int start, i, prev, next;
+    next = neighHead[Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox()];
+    prev = -1;
+    i = 0;
+    while(i != -1){
+        i = next;
+        if( next < i1*4+j1) {
+            if(prev == -1) {
+                neighHead[Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox()] = i1*4+j1;
+                neighList[i1*4+j1] = next;
+                return 0;
+            }
+            neighList[prev] = i1*4+j1;
+            neighList[i1*4+j1] = next;
+            return 0;
+        }
+        prev = i;
+        next = neighList[i];
+    }
+    std::cout << "LinkListUpdate() failed on AmAc[" << i1 << "].Bd[" << j1 << "]" << endl;
+    return -1;
+}
+// update Linked List position of Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1]
+int LinkListUpdate(Chain Chn[], int i1, int j1)
+{
+    int oldBox;
+    int prevNei, nextNei;
+
+    oldBox = Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox();
+    Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].setBox(assignBox( Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1] ));
+    if( oldBox != Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox() ) {
+        prevNei = neighHead[ oldBox ];
+        if( prevNei == i1*4+j1 ) {
+            neighHead[ oldBox ] = neighList[ prevNei ];
+            neighList[ prevNei ] = -1;
+            prevNei = -1;
+        }
+        while(prevNei != -1) {
+            nextNei = neighList[ prevNei ];
+            if(nextNei == i1*4+j1) {
+                neighList[ prevNei ] = neighList[ nextNei ];
+                neighList[ nextNei ] = -1;
+                prevNei = -1;
+            }
+            else {
+                prevNei = nextNei;
+            }
+        }
+        LinkListInsert(Chn, i1, j1);
+        //printf("\t\tneighlist was updated:\t\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\tnewBox=%3d\n", i1, j1, i1*4+j1, oldBox, AmAc[i1].Bd[j1].getBox());
+    }
+    else
+        //printf("\t\tneighlist wasn't updated\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\n", i1, j1, i1*4+j1, oldBox);
+    return 0;
+}

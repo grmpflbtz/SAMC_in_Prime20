@@ -80,53 +80,60 @@ using namespace std;
 //XXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   SIMULATION PARAMETERS - GLOBAL VARIABLES   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-const int N_CH = 2;                         // number of chains in system
-const int N_AA = 14;                         // number of amino acids in chains
-const char AA_seq[N_AA+1] = "QQQQQQQQQQQQQQ";     // amino acid sequence of chains
-const double L = 100.0;                      // side length of cubic simulation cell
+int N_CH;                                // number of chains in system
+int N_AA;                         // number of amino acids in chains
+string AA_seq;
+double L;                      // side length of cubic simulation cell
 
-const int NBin = 100;                        // number of energy bins for histogram
-const double EMin = -10.0;
-const double EMax = -0.0;
-const double BinW = (EMax-EMin)/(double)NBin;
-const double EStart = EMax;                 // energy below which the sim ends the preSAMC moves
-const int tStart = 5000;                       // minimum number of preSAMC moves
+int NBin;                        // number of energy bins for histogram
+double EMin;
+double EMax;
+double BinW;
+double EStart;                 // energy below which the sim ends the preSAMC moves
+int tStart;                       // minimum number of preSAMC moves
 
-const int nstep = N_CH*N_AA*4;
+int nstep;
 //const int nstep = 8*N_AA*N_CH;
-const unsigned long int T_0 = 1e4;
-const unsigned long int T_MAX = 1e9;
-const unsigned long int T_WRITE = 1e6;
-const unsigned long int T_BC_RESET = 1e5;
+unsigned long int T_0;
+unsigned long int T_MAX;
+unsigned long int T_WRITE;
+unsigned long int T_BC_RESET;
 
-const double GAMMA_0 = 0.01;
+double GAMMA_0;
 
-const int NBOX = 10;
-const double LBOX = 10;                  // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
-int neighHead[NBOX*NBOX*NBOX], neighList[4*N_AA*N_CH];
+int NBOX;
+double LBOX;                  // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
 
-int HBList[N_CH*N_AA][2], HBLcpy[N_CH*N_AA][2];                         // BB HB contact list. value is bond partner amino acid (-1 if no HB). column order [N][C]
-double NCDist[N_CH*N_AA][N_CH*N_AA], NCDcpy[N_CH*N_AA][N_CH*N_AA];      // N_CH*N_AA x N_CH*N_AA matrix of N-C distances squared
+int *neighHead;
+int *neighList;
+//int neighHead[NBOX*NBOX*NBOX], neighList[4*N_AA*N_CH];
+
+int **HBList;
+int **HBLcpy;
+//int HBList[N_CH*N_AA][2], HBLcpy[N_CH*N_AA][2];                         // BB HB contact list. value is bond partner amino acid (-1 if no HB). column order [N][C]
+double **NCDist;
+double **NCDcpy;
+//double NCDist[N_CH*N_AA][N_CH*N_AA], NCDcpy[N_CH*N_AA][N_CH*N_AA];      // N_CH*N_AA x N_CH*N_AA matrix of N-C distances squared
 
 //Random selection weights of moves.
-const int WT_WIGGLE = 800;              // weight wiggle
-const int WT_PHI = 20;                  // weight rotPhi
-const int WT_PSI = 20;                  // weight rotPsi
-const int WT_TRANS = 0;                 // weight translation
-const int WT_ROSENC = 1;
-const int WT_ROSENN = 1;
+int WT_WIGGLE;              // weight wiggle
+int WT_PHI;                  // weight rotPhi
+int WT_PSI;                  // weight rotPsi
+int WT_TRANS;                 // weight translation
+int WT_ROSENC;
+int WT_ROSENN;
 // movement restraints
-const double DISP_MAX = 0.01;           // max displacement in wiggle move
-const double DPHI_MAX = 1.047;          // max Phi rotation angle in rotphi (59.99°)
-const double DPSI_MAX = 1.047;          // max Psi rotation angle in rotpsi (59.99°)
+double DISP_MAX;
+double DPHI_MAX;
+double DPSI_MAX;
 
-const bool EBIN_TRUNC_UP = false;        // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
-const bool MEASURE = false;
-    const bool HB_CONTMAT = true;
-    const bool WRITE_CONFIG = true;
-        const int CONFIG_N = 2;
-        const double CONFIG_ENER[CONFIG_N] = {-1.32, 0.4};
-        const double CONFIG_VAR = 0.02;
+bool EBIN_TRUNC_UP;        // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
+bool MEASURE;
+    bool HB_CONTMAT;
+    bool WRITE_CONFIG;
+        int CONFIG_N;
+        double *CONFIG_ENER;
+        double CONFIG_VAR;
 
 mt19937 rng(time(NULL));                // constructor for random number generator
 //mt19937 rng(2);                        // debug
@@ -172,8 +179,8 @@ int LinkListUpdate(Chain Chn[], int i1, int j1);                                
 int main() 
 {
     Timer Timer;                                            // timer for simulation
-    Chain Chn[N_CH];                                        // chains in system
-    Bead BdCpy[4*N_AA*N_CH];                                // copy of Beads
+    Chain *Chn;                                             // chains in system
+    Bead *BdCpy;                                            // copy of Beads
     uniform_real_distribution<double> realdist01(0.0,1.0);  // uniform distribution of real numbers
     ofstream backup;
     std::ostringstream oss;
@@ -186,13 +193,79 @@ int main()
     int oldBox, prevNei, nextNei;                           // variables for neighbour list calculations
     long unsigned int t, tcont, tTimer;                     // time variable keeping track of # steps passed
     int tstep, tE, twrite, tBCreset;
-    long unsigned int H[NBin];                              // energy histogram
+    long unsigned int *H;                                   // energy histogram
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     long unsigned int nattempt[4], naccept[4];              // no. attempted moves and no. accepted moves
-    double lngE[NBin];                                      // ln g(E): logarithm of density of states g(E) → current approximation
-    double contHB[NBin][N_CH*N_AA][N_CH*N_AA];              // contact matrix of hydrogen bonds
+    double *lngE;                                           // ln g(E): logarithm of density of states g(E) → current approximation
+    double *contHB;                                         // contact matrix of hydrogen bonds
     int conf_n[CONFIG_N], conf_write_t[CONFIG_N];           // number of configurations written for the selcted energy and last time writing a config for this energy
     double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
+
+
+    N_CH = 2;
+    N_AA = 14;
+    L = 100.0;
+    AA_seq = "QQQQQQQQQQQQQQ";
+
+    NBin = 100;
+    EMin = -10.0;
+    EMax = -0.0;
+    BinW = (EMax-EMin)/(double)NBin;
+    EStart = EMax;
+    tStart = 5000;
+
+    nstep = 4*N_AA*N_CH;
+    T_0 = 1e4;
+    T_MAX = 1e9;
+    T_WRITE = 1e6;
+    T_BC_RESET = 1e5;
+
+    GAMMA_0 = 0.01;
+
+    NBOX = 10;
+    LBOX = 10;
+
+    neighHead = new int[NBOX*NBOX*NBOX];
+    neighList = new int[4*N_AA*N_CH];
+    HBList = new int*[N_CH*N_AA];
+    HBLcpy = new int*[N_CH*N_AA];
+    NCDist = new double*[N_CH*N_AA];
+    NCDcpy = new double*[N_CH*N_AA];
+    for( int i=0; i<N_CH*N_AA; i++ ) { 
+        HBList[i] = new int[2];
+        HBLcpy[i] = new int[2];
+        NCDist[i] = new double[N_CH*N_AA];
+        NCDcpy[i] = new double[N_CH*N_AA];
+    }
+
+    WT_WIGGLE = 800;
+    WT_PHI = 20;
+    WT_PSI = 20;
+    WT_TRANS = 0;
+    WT_ROSENC = 1;
+    WT_ROSENN = 1;
+
+    DISP_MAX = 0.01;
+    DPHI_MAX = 1.047;
+    DPSI_MAX = 1.047;
+
+    EBIN_TRUNC_UP = false;
+
+    MEASURE = false;
+    HB_CONTMAT = true;
+    WRITE_CONFIG = true;
+    CONFIG_N = 2;
+    CONFIG_ENER = new double[CONFIG_N]; CONFIG_ENER[0] = -1.32; CONFIG_ENER[1] = 0.4;
+    CONFIG_VAR = 0.02;
+
+
+
+    Chn = new Chain[N_CH];
+    BdCpy = new Bead[4*N_AA*N_CH];
+    H = new long unsigned int[NBin];
+    lngE = new double[NBin];
+    contHB = new double[NBin * N_CH*N_AA * N_CH*N_AA];
+
 
     fill_n(neighHead, NBOX*NBOX*NBOX, -1), fill_n(neighList, 4*N_AA*N_CH, -1);
 
@@ -228,7 +301,7 @@ int main()
                     H[i] = 0; 
                     for( int j=0; j<N_CH*N_AA; j++ ) {
                         for( int k=0; k<N_CH*N_AA; k++ ) {
-                            contHB[i][j][k] = 0;
+                            contHB[i*N_CH*N_AA*N_CH*N_AA + j*N_CH*N_AA + k] = 0;
                         }
                     }
                 }
@@ -706,7 +779,7 @@ int main()
             if(MEASURE) {
                 if(HB_CONTMAT) {
                     for( int i=0; i<N_CH*N_AA; i++ ) {
-                        if( HBList[i][0] > -1 ) { contHB[ eBin_o ][ i ][ HBList[i][0] ] += 1; }
+                        if( HBList[i][0] > -1 ) { contHB[ eBin_o*N_CH*N_AA*N_CH*N_AA + i*N_CH*N_AA + HBList[i][0] ] += 1; }
                     }
                 }
                 if(WRITE_CONFIG) {
@@ -764,7 +837,7 @@ int main()
                         for( int i=0; i<NBin; i++ ) {
                             for( int j=0; j<N_CH*N_AA; j++ ) {
                                 for( int k=0; k<N_CH*N_AA; k++ ) {
-                                    backup << contHB[i][j][k]/H[i] << " ";
+                                    backup << contHB[i*N_CH*N_AA*N_CH*N_AA + j*N_CH*N_AA + k]/H[i] << " ";
                                 }
                                 backup << std::endl;
                             }
@@ -817,6 +890,25 @@ int main()
     std::printf("\npraise the sun ☀\n");
 
     Timer.endProgram();
+
+    delete[] neighHead;
+    delete[] neighList;
+    for( int i=0; i<N_CH*N_AA; i++ ) { 
+        delete[] HBList[i];
+        delete[] HBLcpy[i];
+        delete[] NCDist[i];
+        delete[] NCDcpy[i];
+    }
+    delete[] HBList;
+    delete[] HBLcpy;
+    delete[] NCDist;
+    delete[] NCDcpy;
+
+    delete[] Chn;
+    delete[] BdCpy;
+    delete[] contHB;
+
+    delete[] CONFIG_ENER;
 
     return 0;
 }

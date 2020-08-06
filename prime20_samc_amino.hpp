@@ -36,12 +36,11 @@ class AmiAc
     public:
         Bead Bd[4];       // Amino acid consists of 4 united atom beads
 
-        void Setup(const char *chain, int i);                   // Sets up amino acid type & beads
+        void Setup(string chain, int i);                   // Sets up amino acid type & beads
         int getAAnum();                                         // access AA_num
         double getDisR(int i);                                  // access distance from side chain to bead i
         double getAng(int i);                                   // access angles
         double getSQZ(int i);                                   // access squeeze parameters
-        double DiaSQ(const char *chain, int j, int ia, int ja); // squared bead pair HC diameters, including reduced diameters for neighbouring residues.
 
         AmiAc(void);
         ~AmiAc(void);

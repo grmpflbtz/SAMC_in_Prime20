@@ -12,9 +12,9 @@
 using namespace std;
 //-------------------------------------------------------
 // convert Amino Acid char to integer
-const int AA2INT(const char *chain, int i)
+const int AA2INT(string chain, int i)
 {
-	char c = chain[i];
+	char c = chain.at(i);
 	if(c=='G') return 0;
 	if(c=='A') return 1;
 	if(c=='V') return 2;
@@ -38,11 +38,11 @@ const int AA2INT(const char *chain, int i)
 	printf("invalid char in amino acid sequence: %c\n", c); return -1;
 }
 // sets up amino acid type & bead properties
-void AmiAc::Setup(const char *chain, int i)
+void AmiAc::Setup(string chain, int i)
 {
     // converting char sequence to int sequence
 	AA_pos = i;
-	AA_alp = chain[i];
+	AA_alp = chain.at(i);
 	AA_num = AA2INT(chain, i);
 	// side chain (pseudo-)bond lengths (CaR. NR, CR)
     switch(AA_num) {

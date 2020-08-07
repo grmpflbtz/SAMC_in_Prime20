@@ -70,6 +70,7 @@
 #include <algorithm>
 #include <array>
 
+#include "structures.hpp"
 #include "prime20_samc_chain.hpp"
 #include "prime20_samc_para.hpp"
 #include "timer.hpp"
@@ -145,32 +146,32 @@ mt19937 rng(time(NULL));                // constructor for random number generat
 double dotPro(double vecA[], double vecB[]);                                            // dot product
 double absVec(double vec[]);                                                            // absolute of vector
 tuple<double,double,double> crossPro(double vecA[], double vecB[]);                     // cross product
-tuple<double,double,double> distVecBC(Bead vecA, Bead vecB);                            // distance vector
+tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB);                            // distance vector
 double RND();                                                                           // RNG generating double (-1,1)
-void ConsoleOutputHead();                                                               // writes simulation head to console
-bool newChain(Chain Chn[], int chnNum);                                                 // creates new chain
+void ConsoleOutputHead(SysPara *sp);                                                               // writes simulation head to console
+bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                                 // creates new chain
 bool readParaInput(Chain Chn[]);                                                        // read system arameters from file
-bool readCoord(Chain Chn[], string inputFile);                                          // read chain config from file
+bool readCoord(SysPara *sp, Chain Chn[], string inputFile);                                          // read chain config from file
 bool readPrevRunInput(Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
-bool extra_lngE(string inputFile, double lngE[]);                                       // reads lngE data from file
-bool outputPositions(Chain Chn[], string name, int mode);                               // writes positions to file "name"
-bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
-bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
-bool HBcheck(Chain Chn[], int iN, int iC);                                              // check if HB exists and update HBList
+bool extra_lngE(SysPara *sp, string inputFile, double lngE[]);                                       // reads lngE data from file
+bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode);                               // writes positions to file "name"
+bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
+bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
+bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                              // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
-double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch);   // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
-double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
-double E_check(Chain Chn[]);                                                            // recalculate energy from scratch
+double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch);   // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
+double E_check(SysPara *sp, Chain Chn[]);                                                            // recalculate energy from scratch
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
-bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE);                          // small displacement of Chn[h].AmAc[i].Bd[j]
-bool rotPhi(Chain Chn[], int i1, int high, double &deltaE);                             // rotation around N_AA-Ca axis of i1-th amino acid
-bool rotPsi(Chain Chn[], int i1, int high, double &deltaE);                             // rotation around Ca-C axis of i1-th amino acid
-bool translation(Chain Chn[], int iChn, double &deltaE);                                // translation move of the whole chain
-bool checkBndLngth(Chain Chn[], int sp, int ep);                                        // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
-bool resetBCcouter(Chain Chn[]);                                                        // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
+bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);                          // small displacement of Chn[h].AmAc[i].Bd[j]
+bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);                             // rotation around N_AA-Ca axis of i1-th amino acid
+bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);                             // rotation around Ca-C axis of i1-th amino acid
+bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                                // translation move of the whole chain
+bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                                        // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+bool resetBCcouter(SysPara *sp, Chain Chn[]);                                                        // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
 int assignBox(Bead Bd);                                                                 // assigns neighbour list box to bead
-int LinkListInsert(Chain Chn[], int i1, int j1);                                        // insert particle AmAc[i1].Bd[j1] into Linked List
-int LinkListUpdate(Chain Chn[], int i1, int j1);                                        // update Linked List position of AmAc[i1].Bd[j1]
+int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                                        // insert particle AmAc[i1].Bd[j1] into Linked List
+int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                                        // update Linked List position of AmAc[i1].Bd[j1]
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -178,6 +179,8 @@ int LinkListUpdate(Chain Chn[], int i1, int j1);                                
 
 int main() 
 {
+    SysPara *sp = new SysPara;                              // structure containing system parameters
+
     Timer Timer;                                            // timer for simulation
     Chain *Chn;                                             // chains in system
     Bead *BdCpy;                                            // copy of Beads
@@ -201,6 +204,9 @@ int main()
     int conf_n[CONFIG_N], conf_write_t[CONFIG_N];           // number of configurations written for the selcted energy and last time writing a config for this energy
     double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
 
+    sp->N_CH = 2;
+    sp->N_AA = 14;
+    sp->L = 100.0;
 
     N_CH = 2;
     N_AA = 14;
@@ -269,7 +275,7 @@ int main()
 
     fill_n(neighHead, NBOX*NBOX*NBOX, -1), fill_n(neighList, 4*N_AA*N_CH, -1);
 
-    ConsoleOutputHead();
+    ConsoleOutputHead(sp);
 
     // initialization of some values
     for( int i=0; i<4; i++ ) {
@@ -292,7 +298,7 @@ int main()
         tcont = 0;
     }
     // check if there is an extra input file for lngE
-    if( extra_lngE( "input.lng", lngE ) ) {
+    if( extra_lngE(sp, "input.lng", lngE ) ) {
         tcont = 0;
         if(MEASURE) {
             if(HB_CONTMAT) {
@@ -315,18 +321,18 @@ int main()
         }
     }
     // geometry: read from input file or create new
-    if( !readCoord(Chn, "input.xyz") ) {
+    if( !readCoord(sp, Chn, "input.xyz") ) {
         std::cout << "creating new Chain" << std::endl;
         for( int i=0; i<N_CH; i++ ) {
-            newChain(Chn, i);
+            newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
                 for( int j=0; j<N_AA; j++ ) {
                     for( int k=0; k<4; k++ ) {
-                        dist[2] = Chn[m].AmAc[j].Bd[k].getR(2) + 15;
+                        dist[2] = Chn[m].AmAc[j].Bd[k].getR(2) + (sp->L)/((double)sp->N_CH);
                         Chn[m].AmAc[j].Bd[k].setBC( 2, Chn[m].AmAc[j].Bd[k].getBC(2) + floor(dist[2]/L) );
                         dist[2] = dist[2] - L*floor(dist[2]/L);
                         Chn[m].AmAc[j].Bd[k].setR( Chn[m].AmAc[j].Bd[k].getR(0), Chn[m].AmAc[j].Bd[k].getR(1), dist[2] );
-                        LinkListUpdate(Chn, (m*N_AA)+j, k);
+                        LinkListUpdate(sp, Chn, (m*N_AA)+j, k);
                     }
                 }
             }
@@ -334,7 +340,7 @@ int main()
     }
 
     // position check file output
-    outputPositions(Chn, "AnorLondo.xyz", 0);
+    outputPositions(sp, Chn, "AnorLondo.xyz", 0);
 
     // initialize HB list and N-C distance list
     for(int i = 0; i < N_CH*N_AA; i++) {
@@ -342,7 +348,7 @@ int main()
         HBList[i][1] = -1;  HBLcpy[i][1] = -1;
         for(int j = 0; j < N_CH*N_AA; j++) {
             if( (i/N_AA != j/N_AA) ||  ((i/N_AA == j/N_AA) && (abs(i-j) > 3)) ) {
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
                 distabs = dotPro(dist, dist);
                 if(distabs < SW2HUGE) {                // exclude unrelevant distances
                     NCDist[i][j] = distabs;
@@ -358,11 +364,11 @@ int main()
     Eold = 0.0;
     for( int i=0; i<N_CH*N_AA; i++ ) {
         for( int j=0; j<N_CH*N_AA; j++ ) {
-            if( HBcheck(Chn, i, j) ) {
+            if( HBcheck(sp, Chn, i, j) ) {
                 Eold -= 1.0;
             }
         }
-        Eold += EO_SegBead(Chn, i/N_AA, i%N_AA, 3, i, N_CH*N_AA, 1);
+        Eold += EO_SegBead(sp, Chn, i/N_AA, i%N_AA, 3, i, N_CH*N_AA, 1);
     }
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     t = 0;
@@ -397,21 +403,21 @@ int main()
                 i_rand = trunc(realdist01(rng)*(N_CH*N_AA*4));
                 ip = i_rand/4;                              // amino acid identifier
                 jp = i_rand%4;                              // bead
-                accept = wiggle(Chn, ip/N_AA, ip%N_AA, jp, deltaE);
+                accept = wiggle(sp, Chn, ip/N_AA, ip%N_AA, jp, deltaE);
                 break;
             case 1:
                 ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
                 jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
-                accept = rotPhi(Chn, ip, jp, deltaE);
+                accept = rotPhi(sp, Chn, ip, jp, deltaE);
                 break;
             case 2:
                 ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
                 jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
-                accept = rotPsi(Chn, ip, jp, deltaE);
+                accept = rotPsi(sp, Chn, ip, jp, deltaE);
                 break;
             case 3:
                 ip = trunc(realdist01(rng)*N_CH);
-                accept = translation(Chn, ip, deltaE);
+                accept = translation(sp, Chn, ip, deltaE);
                 break;
             default:
                 std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
@@ -469,14 +475,14 @@ int main()
             }
         }
 
-        if( !checkBndLngth(Chn, 0, N_CH*N_AA) ) {               // check bond length after every move - if this failes: abort run
+        if( !checkBndLngth(sp, Chn, 0, N_CH*N_AA) ) {               // check bond length after every move - if this failes: abort run
             std::cerr << endl << "bond length error: t=" << t << std::endl;
             std::cerr << "Energy = " << Eold << std::endl;
-            outputPositions(Chn, "AnorLondo.xyz", 1);
+            outputPositions(sp, Chn, "AnorLondo.xyz", 1);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
-        Ecur = E_check(Chn);
+        Ecur = E_check(sp, Chn);
         if( abs(Eold-Ecur) > 0.01 ) {
             std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
             std::cerr.precision(3); std::cerr << std::fixed;
@@ -489,7 +495,7 @@ int main()
             for( int k=0; k<N_CH*N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
             }
-            outputPositions(Chn, "AnorLondo.xyz", 1);
+            outputPositions(sp, Chn, "AnorLondo.xyz", 1);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -498,7 +504,7 @@ int main()
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
-    outputPositions(Chn, "AnorLondo.xyz", 1);
+    outputPositions(sp, Chn, "AnorLondo.xyz", 1);
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
@@ -534,7 +540,7 @@ int main()
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
                     BdCpy[ip*4+jp] = Chn[ip/N_AA].AmAc[ip%N_AA].Bd[jp];
-                    accept = wiggle(Chn, ip/N_AA, ip%N_AA, jp, deltaE);
+                    accept = wiggle(sp, Chn, ip/N_AA, ip%N_AA, jp, deltaE);
                     break;
                 case 1:
                     ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
@@ -554,7 +560,7 @@ int main()
                                 }
                             }
                     }
-                    accept = rotPhi(Chn, ip, jp, deltaE);
+                    accept = rotPhi(sp, Chn, ip, jp, deltaE);
                     break;
                 case 2:
                     ip = trunc(realdist01(rng)*(N_CH*N_AA));    // amino acid identifier of the rotation origin
@@ -574,7 +580,7 @@ int main()
                                 }
                             }
                     }
-                    accept = rotPsi(Chn, ip, jp, deltaE);
+                    accept = rotPsi(sp, Chn, ip, jp, deltaE);
                     break;
                 case 3:
                     ip = trunc(realdist01(rng)*N_CH);
@@ -583,7 +589,7 @@ int main()
                             BdCpy[ip*N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
                         }
                     }
-                    accept = translation(Chn, ip, deltaE);
+                    accept = translation(sp, Chn, ip, deltaE);
                     break;
                 default:
                     std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
@@ -609,7 +615,7 @@ int main()
                                     oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
                                     Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*N_AA+4*i+j];
                                     Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
-                                    LinkListUpdate(Chn, ip*N_AA+i, j);
+                                    LinkListUpdate(sp, Chn, ip*N_AA+i, j);
                                 }
                                 for( int j=0; j<N_CH*N_AA; j++ ) {
                                     if( j<ip*N_AA || j>=(ip+1)*N_AA ) {
@@ -627,7 +633,7 @@ int main()
                                             oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
                                             Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
                                             Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
-                                            LinkListUpdate(Chn, i, j);                              // reset LinkedList
+                                            LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
                                         }
                                         for( int j=0; j<N_CH*N_AA; j++ ) {                          // reset NCDist[][]
                                             if( j<(ip/N_AA)*N_AA || j>ip-1 ) {
@@ -643,7 +649,7 @@ int main()
                                             oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
                                             Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
                                             Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
-                                            LinkListUpdate(Chn, i, j);                              // reset LinkedList
+                                            LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
                                         }
                                         for( int j=0; j<N_CH*N_AA; j++ ) {                          // reset NCDist[][]
                                             if( j<ip+1 || j>=((ip/N_AA)+1)*N_AA ) {
@@ -725,7 +731,7 @@ int main()
                                 oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
                                 Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*N_AA+4*i+j];
                                 Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
-                                LinkListUpdate(Chn, ip*N_AA+i, j);
+                                LinkListUpdate(sp, Chn, ip*N_AA+i, j);
                             }
                             for( int j=0; j<N_CH*N_AA; j++ ) {
                                 if( j<ip*N_AA || j>=(ip+1)*N_AA ) {
@@ -743,7 +749,7 @@ int main()
                                         oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
                                         Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
                                         Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
-                                        LinkListUpdate(Chn, i, j);                                  // reset LinkedList
+                                        LinkListUpdate(sp, Chn, i, j);                                  // reset LinkedList
                                     }
                                     for( int j=0; j<N_CH*N_AA; j++ ) {                              // reset NCDist[][]
                                         if( j<(ip/N_AA)*N_AA || j>ip-1 ) {
@@ -759,7 +765,7 @@ int main()
                                         oldBox = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
                                         Chn[i/N_AA].AmAc[i%N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
                                         Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox(oldBox);
-                                        LinkListUpdate(Chn, i, j);                                  // reset LinkedList
+                                        LinkListUpdate(sp, Chn, i, j);                                  // reset LinkedList
                                     }
                                     for( int j=0; j<N_CH*N_AA; j++ ) {                              // reset NCDist[][]
                                         if( j<ip+1 || j>=((ip/N_AA)+1)*N_AA ) {
@@ -793,7 +799,7 @@ int main()
                                 if(backup.is_open()) {
                                     backup << "# Coordinates of " << N_CH << " " << N_AA << "-mer(s) with sequence " << AA_seq << " at E=" << Eold << std::endl;
                                     backup.close();
-                                    outputPositions(Chn, filename, 1);
+                                    outputPositions(sp, Chn, filename, 1);
                                     std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
                                 } else {
                                     std::cout << std::endl << "error opening " << filename << std::endl;
@@ -825,9 +831,9 @@ int main()
 
         if( twrite == T_WRITE ) {           // write Backup-File
             if(!MEASURE) {
-                BackupSAMCrun(Chn, Timer, t, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
+                BackupSAMCrun(sp, Chn, Timer, t, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
             } else {
-                BackupProdRun(Timer, t, H);
+                BackupProdRun(sp, Timer, t, H);
                 if(HB_CONTMAT) {
                     filename = "HBmat.dat";
                     backup.open(filename, ios::out);
@@ -863,7 +869,7 @@ int main()
 
         // Energy check
         if( tE == 10000 ) {
-            Ecur = E_check(Chn);
+            Ecur = E_check(sp, Chn);
             if( abs(Eold-Ecur) > 0.01 ) {
                 std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
                 std::cerr << endl << "HBList" << endl;
@@ -872,7 +878,7 @@ int main()
                 }
                 std::cerr << endl;
 
-                outputPositions(Chn, "AnorLondo.xyz", 1);
+                outputPositions(sp, Chn, "AnorLondo.xyz", 1);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
@@ -883,7 +889,7 @@ int main()
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
-    outputPositions(Chn, "AnorLondo.xyz", 1);
+    outputPositions(sp, Chn, "AnorLondo.xyz", 1);
 
     Timer.PrintProgress(t, T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
@@ -909,6 +915,8 @@ int main()
     delete[] contHB;
 
     delete[] CONFIG_ENER;
+
+    delete sp;
 
     return 0;
 }
@@ -939,13 +947,13 @@ tuple<double,double,double> crossPro(double vecA[], double vecB[])
     return make_tuple(x,y,z);
 }
 // distance vector from vecA to vecB including periodic boundary conditions
-tuple<double,double,double> distVecBC(Bead vecA, Bead vecB)
+tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB)
 {
     // with periodic boundary conditions
     double x, y, z;
-    x = vecB.getR(0)-vecA.getR(0) - L*round( (vecB.getR(0)-vecA.getR(0)) / (double) L );
-    y = vecB.getR(1)-vecA.getR(1) - L*round( (vecB.getR(1)-vecA.getR(1)) / (double) L );
-    z = vecB.getR(2)-vecA.getR(2) - L*round( (vecB.getR(2)-vecA.getR(2)) / (double) L );
+    x = vecB.getR(0)-vecA.getR(0) - L*round( (vecB.getR(0)-vecA.getR(0)) / (double) sp->L );
+    y = vecB.getR(1)-vecA.getR(1) - L*round( (vecB.getR(1)-vecA.getR(1)) / (double) sp->L );
+    z = vecB.getR(2)-vecA.getR(2) - L*round( (vecB.getR(2)-vecA.getR(2)) / (double) sp->L );
     return make_tuple(x,y,z);
 }
 // return random real number between -1 and 1
@@ -958,11 +966,11 @@ double RND()
 //          XXXXXXXXXX  INPUT OUTPUT FUNCTIONS  XXXXXXXXXX
 
 // Head of colsole output
-void ConsoleOutputHead()
+void ConsoleOutputHead(SysPara *sp)
 {
     time_t curtime;
     std::cout << "SAMC PRIME20 simulation" << endl;
-    std::cout << "No. of chains " << N_CH << ", chain length " << N_AA << ", sequence " << AA_seq << endl;
+    std::cout << "No. of chains " << sp->N_CH << ", chain length " << N_AA << ", sequence " << AA_seq << endl;
     std::cout << "duration T_MAX = " << T_MAX << endl;
     if(!MEASURE)
         std::cout << "SAMC run to apprximate ln[g(E)]." << endl;
@@ -973,7 +981,7 @@ void ConsoleOutputHead()
     
 }
 // creates new chain Chn with N_AA amino acids specified in AA_seq. returns true if successful
-bool newChain(Chain Chn[], int chnNum)
+bool newChain(SysPara *sp, Chain Chn[], int chnNum)
 {
     AmiAc AAinsert;
     double rad, ZrotAng, XrotAng;                           // radius for y-z calc, rotation angle
@@ -983,7 +991,7 @@ bool newChain(Chain Chn[], int chnNum)
 
     Chn[chnNum].setChnNo(chnNum);
     Chn[chnNum].AmAc.clear();
-    for (int i=0; i<N_AA; i++) {                            // converting char sequence to int sequence
+    for (int i=0; i<sp->N_AA; i++) {                            // converting char sequence to int sequence
         AAinsert.Setup(AA_seq, i);
         Chn[chnNum].AmAc.push_back(AAinsert);
     }
@@ -1015,7 +1023,7 @@ bool newChain(Chain Chn[], int chnNum)
     tranVec[1] = - (BND_CaC*sin(ANGL_NCaC) + BND_CN*sin(ANGL_CaCN-ANGL_NCaC));
     tranVec[2] = - 0.0;
 
-    for(int i = 0; i < N_AA; i++) {
+    for(int i = 0; i < sp->N_AA; i++) {
         // relocation of existing chain
         if( i != 0 ) {
             // translation + double rotation
@@ -1052,7 +1060,7 @@ bool newChain(Chain Chn[], int chnNum)
         Chn[chnNum].AmAc[i].Bd[3].setR(variaMtrx[0], variaMtrx[1], variaMtrx[2]);
     }
     // move polymer to positive coordinates = apply periodic boundary conditions
-    for(int i = 0; i < N_AA; i++) {
+    for(int i = 0; i < sp->N_AA; i++) {
         for(int j = 0; j < 4; j++) {
             for( int k=0; k<3; k++ ) {
                 Chn[chnNum].AmAc[i].Bd[j].addBC(k, floor(Chn[chnNum].AmAc[i].Bd[j].getR(k)/L ));
@@ -1062,21 +1070,21 @@ bool newChain(Chain Chn[], int chnNum)
         }
     }
     // create neighbour list
-    for( int i=0; i<N_AA; i++ ) {
+    for( int i=0; i<sp->N_AA; i++ ) {
         for ( int j=0; j<4; j++ ) {
             Chn[chnNum].AmAc[i].Bd[j].setBox(assignBox(Chn[chnNum].AmAc[i].Bd[j]));
         }
     }
-    for(int i = chnNum*N_AA; i < (chnNum+1)*N_AA; i++) {
+    for(int i = chnNum*sp->N_AA; i < (chnNum+1)*sp->N_AA; i++) {
         for(int j = 0; j < 4; j++) {
-            LinkListInsert(Chn, i, j);
+            LinkListInsert(sp, Chn, i, j);
         }
     }
 
     return true;
 }
 // read chain config from file
-bool readCoord(Chain Chn[], string inputFile)
+bool readCoord(SysPara *sp, Chain Chn[], string inputFile)
 {
     AmiAc AAinsert;
     ifstream input;
@@ -1089,10 +1097,10 @@ bool readCoord(Chain Chn[], string inputFile)
     input.open(inputFile);
     if( input.is_open() ) {
         std::cout << "reading coordiates from input file '" << inputFile << "'" << std::endl;
-        for( int j=0; j<N_CH; j++ ) {
+        for( int j=0; j<sp->N_CH; j++ ) {
             Chn[j].setChnNo(j);
             Chn[j].AmAc.clear();
-            for( int k=0; k<N_AA; k++ ) {
+            for( int k=0; k<sp->N_AA; k++ ) {
                 AAinsert.Setup(AA_seq, k);
                 Chn[j].AmAc.push_back(AAinsert);
             }
@@ -1106,33 +1114,33 @@ bool readCoord(Chain Chn[], string inputFile)
             //std::cout << "Chn[" << (i/4)/N_AA << "].AmAc[" << (i/4)%N_AA << "].Bd[" << i%4 << "]\t" << x << "\t" << y << "\t" << z << endl;
 
             //if(i%N_AA == 0) 
-            Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setR(x, y, z);
+            Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
             input.ignore();
             i++;
             if(i == NaaFile) { break; }
         }
-        if(i != N_CH*N_AA*4) {
+        if(i != sp->N_CH*sp->N_AA*4) {
             std::cout << "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << N_AA*4 << std::endl;
         }
 
         // PBC
-        for( int i=0; i<N_CH*N_AA*4; i++ ) {
+        for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
             for( int k=0; k<3; k++ ) {
-                Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setBC(k, floor(Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k) / L) );
-                newposBC[k] = Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k) - L*floor(Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].getR(k)/(double)L);
+                Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setBC(k, floor(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k) / L) );
+                newposBC[k] = Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k) - L*floor(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k)/(double)L);
             }
-            Chn[(i/4)/N_AA].AmAc[(i/4)%N_AA].Bd[i%4].setR(newposBC[0], newposBC[1], newposBC[2]);
+            Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(newposBC[0], newposBC[1], newposBC[2]);
         }
 
         // create neighbour list
-        for( int i=0; i<N_CH*N_AA; i++ ) {
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
-                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBox( assignBox(Chn[i/N_AA].AmAc[i%N_AA].Bd[j]) );
+                Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox( assignBox(Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j]) );
             }
         }
-        for( int i=0; i<N_CH*N_AA; i++ ) {
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
-                LinkListInsert(Chn, i, j);
+                LinkListInsert(sp, Chn, i, j);
             }
         }
         input.close();
@@ -1213,7 +1221,7 @@ bool readPrevRunInput(Chain Chn[], string inputFile, double lngE[], long unsigne
     return false;
 }
 // reads lngE data from file
-bool extra_lngE(string inputFile, double lngE[])
+bool extra_lngE(SysPara *sp, string inputFile, double lngE[])
 {
     ifstream input;
     std::string s_line;
@@ -1253,7 +1261,7 @@ bool extra_lngE(string inputFile, double lngE[])
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)
-bool outputPositions(Chain Chn[], string name, int mode)
+bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode)
 {
     ofstream Checkpos;
     if(mode == 0) {
@@ -1263,9 +1271,9 @@ bool outputPositions(Chain Chn[], string name, int mode)
         Checkpos.open(name, ios::app);
     }
     if( Checkpos.is_open() ) {
-        Checkpos << N_CH*N_AA*4 << std::endl;
+        Checkpos << sp->N_CH*N_AA*4 << std::endl;
 
-        for( int i=0; i<N_CH*N_AA; i++ ) {
+        for( int i=0; i<sp->N_CH*N_AA; i++ ) {
             Checkpos << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(2)*L << endl;
             Checkpos << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(2)*L << endl;
             Checkpos << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(0) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(0)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(1) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(1)*L << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(2) + Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(2)*L << endl;
@@ -1282,7 +1290,7 @@ bool outputPositions(Chain Chn[], string name, int mode)
     }
 }
 // writes backup file in SAMC run
-bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E)
+bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E)
 {
     std::ostringstream oss;
     oss << "SAMCbackup_" << t/T_WRITE << ".dat";
@@ -1290,8 +1298,8 @@ bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammas
     ofstream backup;
     backup.open(name);
     if( backup.is_open() ) {
-        backup << "# SAMC DoS of " << N_CH << " PRIME20 " << N_AA << "-mer(s)" << endl;
-        backup << "# sequence " << AA_seq << endl;
+        backup << "# SAMC DoS of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << endl;
+        backup << "# sequence " << sp->AA_seq << endl;
         backup << "# number of MC steps: " << t+1 << ", with " << nstep << " moves per step" << endl;
         backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << endl;
         backup << "# gamma_0 = " << GAMMA_0 << ", constant until T_0 = " << T_0 << endl;
@@ -1307,11 +1315,11 @@ bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammas
         }
         backup << "# current configuration ( E=" << E << ")" << endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
-        for( int i=0; i<N_CH*N_AA; i++ ) {
-            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[0].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[1].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[2].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getR(2) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(0) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(1) << " " << Chn[i/N_AA].AmAc[i%N_AA].Bd[3].getBC(2) << endl;
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2) << endl;
         }
         backup.close();
         return true;
@@ -1321,7 +1329,7 @@ bool BackupSAMCrun(Chain Chn[], Timer &Timer, unsigned long int t, double gammas
         return false;
     }
 }
-bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[])
+bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[])
 {
     std::ostringstream oss;
     oss << "results_" << t/T_WRITE << ".dat";
@@ -1329,7 +1337,7 @@ bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[])
     ofstream results;
     results.open(name);
     if( results.is_open() ) {
-        results << "# Observables for " << N_CH << " PRIME20 " << N_AA << "-mer(s)" << std::endl;
+        results << "# Observables for " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
         results << "# sequence " << AA_seq << std::endl;
         results << "# number of MC steps: " << t+1 << ", with " << nstep << " moves per step" << std::endl;
         results << "# current runtime: " << Timer.curRunTime() << std::endl;
@@ -1351,7 +1359,7 @@ bool BackupProdRun(Timer &Timer, unsigned long int t, unsigned long int H[])
     }
 }
 // returns true and updates HBList if H-Bond between N(iN) and C(iC) is formed. iN is index of h*N_C+i
-bool HBcheck(Chain Chn[], int iN, int iC)
+bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC)
 {
     double distV[3];                                        // distance vector
     double dist2;                                           // distance squared
@@ -1362,31 +1370,31 @@ bool HBcheck(Chain Chn[], int iN, int iC)
 
     // condition 1:     N and C separated by at least 3 amino acids and within relevant distance
     if( NCDist[iN][iC] < 0 ) { return false; }
-    if( (iN/N_AA == iC/N_AA) && (abs(iN-iC) < 4) ) { return false; }
+    if( (iN/sp->N_AA == iC/sp->N_AA) && (abs(iN-iC) < 4) ) { return false; }
 
     // condition 2:     distance < SW radius
     if( NCDist[iN][iC] < SW2_BB ) {
         // condition 3:     both partners are available
         if( HBList[iN][0] == -1 && HBList[iC][1] == -1 ) {
             // condition 4:     constraints of distances to neighbours of partner (HB stabilisation)
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1]);
             if( dotPro(distV, distV) < DIA2_HB_NCa ) {return false; }
-            if( (iC+1)%N_AA != 0 ) {
-                std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iC/N_AA].AmAc[(iC+1)%N_AA].Bd[0]);
+            if( (iC+1)%sp->N_AA != 0 ) {
+                std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0], Chn[iC/sp->N_AA].AmAc[(iC+1)%sp->N_AA].Bd[0]);
                 if( dotPro(distV, distV) < DIA2_HB_NN ) { return false; }
             }
-            if( iN%N_AA != 0 ) {
-                std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+            if( iN%sp->N_AA != 0 ) {
+                std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[(iN-1)%sp->N_AA].Bd[2], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2]);
                 if( dotPro(distV, distV) < DIA2_HB_CC ) { return false; }
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[1], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2]);
             if( dotPro(distV, distV) < DIA2_HB_CCa ) { return false; }
 
             // condition 5:     calculate H and O positions and check if angle is within range (120°,180°)
             // H
-            if( iN%N_AA == 0 ) {     // NH vector is calculated by rotating NCa in NCaC plane by angle 2.668
-                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1]);
-                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[2]);
+            if( iN%sp->N_AA == 0 ) {     // NH vector is calculated by rotating NCa in NCaC plane by angle 2.668
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0], Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[1]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[1], Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[2]);
                 cos_a = -0.456; sin_a = 0.89;
                 std::tie(rot_n[0], rot_n[1], rot_n[2]) = crossPro( h2, h1);
                 rot_nl = absVec(rot_n);
@@ -1407,19 +1415,19 @@ bool HBcheck(Chain Chn[], int iN, int iC)
                 nh[0] /= nhl; nh[1] /= nhl; nh[2] /= nhl;
             }
             else {
-                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[1]);
-                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2], Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0]);
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[(iN-1)%sp->N_AA].Bd[2], Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[1]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(sp, Chn[iN/sp->N_AA].AmAc[(iN-1)%sp->N_AA].Bd[2], Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0]);
                 adl = (dotPro(h1, h2)) / (dotPro(h1, h1));
                 for( int i=0; i<3; i++ ) {
-                    nh[i] = Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i) - Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2].getR(i)-h1[i]*adl - L*round( (Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i) - Chn[iN/N_AA].AmAc[(iN-1)%N_AA].Bd[2].getR(i)-h1[i]*adl) / (double)L );
+                    nh[i] = Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0].getR(i) - Chn[iN/sp->N_AA].AmAc[(iN-1)%sp->N_AA].Bd[2].getR(i)-h1[i]*adl - sp->L*round( (Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0].getR(i) - Chn[iN/sp->N_AA].AmAc[(iN-1)%sp->N_AA].Bd[2].getR(i)-h1[i]*adl) / (double)L );
                 }
                 nhl = sqrt(dotPro(nh, nh));
                 nh[0] /= nhl;   nh[1] /= nhl;   nh[2] /= nhl;
             }
             // O
-            if( (iC+1)%N_AA == 0 ) {       // CO vector is calculated by rotating CaC in NCaC plane by angle 2.622
-                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
-                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[0], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1]);
+            if( (iC+1)%sp->N_AA == 0 ) {       // CO vector is calculated by rotating CaC in NCaC plane by angle 2.622
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(sp, Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(sp, Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[0], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1]);
                 cos_a = 0.497; sin_a = -0.868;
                 std::tie(rot_n[0], rot_n[1], rot_n[2]) = crossPro( h2, h1);
                 rot_nl = absVec(rot_n);
@@ -1440,17 +1448,17 @@ bool HBcheck(Chain Chn[], int iN, int iC)
                 co[0] *= ((1.2)/col); co[1] *= ((1.2)/col); co[2] *= ((1.2)/col);
             }
             else {
-                std::tie(h1[0], h1[1], h1[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[(iC+1)%N_AA].Bd[0]);
-                std::tie(h2[0], h2[1], h2[2]) = distVecBC(Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1], Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2]);
+                std::tie(h1[0], h1[1], h1[2]) = distVecBC(sp, Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1], Chn[iC/sp->N_AA].AmAc[(iC+1)%sp->N_AA].Bd[0]);
+                std::tie(h2[0], h2[1], h2[2]) = distVecBC(sp, Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1], Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2]);
                 adl = (dotPro(h1, h2)) / (dotPro(h1, h1));
                 for( int i=0; i<3; i++ ) {
-                    co[i] = Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i) - Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1].getR(i)-h1[i]*adl - L*round( (Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i) - Chn[iC/N_AA].AmAc[iC%N_AA].Bd[1].getR(i)-h1[i]*adl) / (double)L );
+                    co[i] = Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2].getR(i) - Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1].getR(i)-h1[i]*adl - sp->L*round( (Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2].getR(i) - Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[1].getR(i)-h1[i]*adl) / (double)L );
                 }
                 col = sqrt(dotPro(co, co));
                 co[0] *= (1.2)/col;   co[1] *= (1.2)/col;   co[2] *= (1.2)/col;
             }
             for( int i=0; i<3; i++ ) {
-                ho[i] = Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i)+co[i] - Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i)-nh[i] - L*round( (Chn[iC/N_AA].AmAc[iC%N_AA].Bd[2].getR(i)+co[i] - Chn[iN/N_AA].AmAc[iN%N_AA].Bd[0].getR(i)-nh[i]) / (double)L );
+                ho[i] = Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2].getR(i)+co[i] - Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0].getR(i)-nh[i] - sp->L*round( (Chn[iC/sp->N_AA].AmAc[iC%sp->N_AA].Bd[2].getR(i)+co[i] - Chn[iN/sp->N_AA].AmAc[iN%sp->N_AA].Bd[0].getR(i)-nh[i]) / (double)L );
             }
             hol = sqrt(dotPro(ho, ho));
             // cosinus calculation
@@ -1482,7 +1490,7 @@ double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq)
     return 0;
 }
 // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
-double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch)
+double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch)
 {
     int neighBox[3], centrBox[3];
     int searchBox, index;
@@ -1506,14 +1514,14 @@ double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswi
         index = neighHead[searchBox];
         while( index != -1 ) {
             if( EOswitch == 0 ) {       // overlapp check
-                if( index/4 == h1*N_AA+i1 ) {
+                if( index/4 == h1*sypa->N_AA+i1 ) {
                     index = neighList[index];
                     continue;
                 }
                 if( index >= sp*4 && index < ep*4 ) {
-                    std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*N_AA)].AmAc[(index/4)%N_AA].Bd[index%4]);
+                    std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*sypa->N_AA)].AmAc[(index/4)%sypa->N_AA].Bd[index%4]);
                     dist2 = dotPro(distV, distV);
-                    if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*N_AA), (index/4)%N_AA, index%4) ) { 
+                    if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*sypa->N_AA), (index/4)%sypa->N_AA, index%4) ) { 
                         //std::cerr << "overlapp: C" << h1 << "A" << i1 << "B" << j1 << " - C" << index/(4*N_AA) << "A" << (index/4)%N_AA << "B" << index%4 << std::endl;
                         return -1.0; 
                     }
@@ -1522,9 +1530,9 @@ double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswi
             else {                      // energy calculation
                 if( index%4 == 3 ) {
                     if( index >= sp*4 && index < ep*4 ) {
-                        std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*N_AA)].AmAc[(index/4)%N_AA].Bd[index%4]);
+                        std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*sypa->N_AA)].AmAc[(index/4)%sypa->N_AA].Bd[index%4]);
                         dist2 = dotPro(distV, distV);
-                        energy += E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2);
+                        energy += E_single(Chn, h1, i1, index/(4*sypa->N_AA), (index/4)%sypa->N_AA, dist2);
 
                         /*if( E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2) != 0.0 ) {
                             std::cerr << endl << "energy contribution " << h1*N_AA+i1 << "  and " << index/4 << "   E = " << E_single(Chn, h1, i1, index/(4*N_AA), (index/4)%N_AA, dist2) << endl;
@@ -1539,7 +1547,7 @@ double EO_SegBead(Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswi
     return energy;
 }
 // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
-double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch) 
+double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch) 
 {
     double dEnergy;
     double energy = 0;
@@ -1547,7 +1555,7 @@ double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch)
     for( int i=sp1; i<ep1; i++ ) {
         for( int j=0; j<4; j++ ) {
             if( EOswitch == 1 && j != 3) continue;  // skip energy calculation for non-SC beads
-            dEnergy = EO_SegBead(Chn, i/N_AA, i%N_AA, j, sp2, ep2, EOswitch);
+            dEnergy = EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, j, sp2, ep2, EOswitch);
             if( dEnergy == -1 ) return -1;          // exit if overlapp check fails
             energy += dEnergy;
         }
@@ -1556,26 +1564,26 @@ double EO_SegSeg(Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch)
     return energy;
 }
 // calculates total energy from scratch
-double E_check(Chain Chn[])
+double E_check(SysPara *sp, Chain Chn[])
 {
-    int HBL_check[N_CH*N_AA][2], HBerrN[N_CH*N_AA][2], HBerrC[N_CH*N_AA][2];
-    double NCD_check[N_CH*N_AA][N_CH*N_AA];
+    int HBL_check[sp->N_CH*sp->N_AA][2], HBerrN[sp->N_CH*sp->N_AA][2], HBerrC[sp->N_CH*sp->N_AA][2];
+    double NCD_check[sp->N_CH*sp->N_AA][sp->N_CH*sp->N_AA];
     double Energy, distabs;
     double distV[3];
 
     // create new HBList → HBL_check
-    for( int i=0; i<N_CH*N_AA; i++ ) {
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
         HBL_check[i][0] = HBList[i][0];
         HBL_check[i][1] = HBList[i][1];
         HBList[i][0] = -1;
         HBList[i][1] = -1;
-        for( int j=0; j<N_CH*N_AA; j++ ) {
-            if( (i/N_AA == j/N_AA) && (abs(i-j) < 4) ) {
+        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+            if( (i/sp->N_AA == j/sp->N_AA) && (abs(i-j) < 4) ) {
                 NCD_check[i][j] = -1.0;
                 continue;
             }
             NCD_check[i][j] = NCDist[i][j];
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0], Chn[j/sp->N_AA].AmAc[j%sp->N_AA].Bd[2]);
             distabs = dotPro(distV, distV);
             if( distabs < SW2HUGE ) {
                 NCDist[i][j] = distabs;
@@ -1587,16 +1595,16 @@ double E_check(Chain Chn[])
     }
     // energy calculation
     Energy = 0.0;
-    for( int i=0; i<N_CH*N_AA; i++ ) {
-        for( int j=0; j<N_CH*N_AA; j++ ) {
-            if( HBcheck(Chn, i, j) ) { 
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+            if( HBcheck(sp, Chn, i, j) ) { 
                 Energy -= 1.0; 
             }
         }
-        Energy += EO_SegBead( Chn, i/N_AA, i%N_AA, 3, i, N_CH*N_AA, 1);
+        Energy += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
     }
     // disagreements between HBList and HBL_check
-    for( int i=0; i<N_CH*N_AA; i++ ) {
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
         if( HBL_check[i][0] != HBList[i][0] ) { 
             HBerrN[i][0] = HBList[i][0];
             HBerrN[i][1] = HBL_check[i][0];
@@ -1610,7 +1618,7 @@ double E_check(Chain Chn[])
     }
     // if multiple HB partners are possible, this does not affect Energy but is still listet as error
     // this should not lead to an error message, thus this is corrected below
-    for( int i=0; i<N_CH*N_AA; i++ ) {
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
         if( HBerrN[i][0] > -1 && HBerrN[i][1] > -1 ) {
             if( HBerrC[HBerrN[i][0]][1] == -1 && HBerrC[HBerrN[i][1]][0] == -1 ) {
                 HBerrC[HBerrN[i][0]][0] = -1;
@@ -1629,7 +1637,7 @@ double E_check(Chain Chn[])
         }
     }
     // error messages and HBList reset
-    for( int i=0; i<N_CH*N_AA; i++ ) {
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
         if( HBerrN[i][0] > -1 || HBerrN[i][1] > -1 ) {
             std::cout << "\n\tHB mismatch detected → N: check " << i << "-" << HBerrN[i][0] << " and running " << i << "-" << HBerrN[i][1] << endl;
         }
@@ -1638,7 +1646,7 @@ double E_check(Chain Chn[])
         }
         HBList[i][0] = HBL_check[i][0];
         HBList[i][1] = HBL_check[i][1];
-        for( int j=0; j<N_CH*N_AA; j++ ) {
+        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
             if( abs(NCD_check[i][j] - NCDist[i][j]) > 0.01 ) {
                 std::cout << endl << "\tN-" << i << " C-" << j << " dist² mismatch:  newly calculated d²=" << NCDist[i][j] << " running value d²=" << NCD_check[i][j] << endl;
             }
@@ -1664,7 +1672,7 @@ bool acceptance(double lngEold, double lngEnew)
 //          XXXXXXXXXXXXXX  MOVE FUNCTIONS  XXXXXXXXXXXXXX
 
 // small displacement of Chn[h].AmAc[i].Bd[j]
-bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
+bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
 {
     Bead cpy;                       // copy of bead to be wiggled, wiggled bead
     double disp[3], dist[3];        // random displacement vector, distance vector
@@ -1674,7 +1682,7 @@ bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
 
     // calculate old energy contribution of SC if j==3
     if( j == 3 ) {
-        Eold = EO_SegBead(Chn, h, i, j, 0, N_AA*N_CH, 1);
+        Eold = EO_SegBead(sp, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 1);
     }
     
     // calculate displacement vector (disp[]) and move bead
@@ -1690,63 +1698,63 @@ bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
     switch(j) {
         case 0:
             if (i>0) {
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
                 if( abs(absVec(dist)/PBND_CaN - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
                 if( abs(absVec(dist)/BND_CN - 1) > BND_FLUCT )          { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
             if( abs(absVec(dist)/BND_NCa - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
             if( abs(absVec(dist)/PBND_NC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(0) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             break;
         case 1:
             if (i>0) {
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[1]);
                 if( abs(absVec(dist)/PBND_CaCa - 1) > BND_FLUCT )       { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i-1].Bd[2]);
                 if( abs(absVec(dist)/PBND_CCa - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
             if( abs(absVec(dist)/BND_NCa - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
             if( abs(absVec(dist)/BND_CaC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(1) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            if (i<N_AA-1) {
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
+            if (i<sp->N_AA-1) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
                 if( abs(absVec(dist)/PBND_CaN - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
                 if( abs(absVec(dist)/PBND_CaCa - 1) > BND_FLUCT )       { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             }
             break;
         case 2:
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
             if( abs(absVec(dist)/PBND_NC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
             if( abs(absVec(dist)/BND_CaC - 1) > BND_FLUCT )             { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[3]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(2) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            if (i<N_AA-1) {
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
+            if (i<sp->N_AA-1) {
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[0]);
                 if( abs(absVec(dist)/BND_CN - 1) > BND_FLUCT )          { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-                std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
+                std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i+1].Bd[1]);
                 if( abs(absVec(dist)/PBND_CCa - 1) > BND_FLUCT )        { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             }
             break;
         case 3:
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[0]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(0) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[1]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(1) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
-            std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
+            std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[j], Chn[h].AmAc[i].Bd[2]);
             if( abs(absVec(dist)/Chn[h].AmAc[i].getDisR(2) - 1) > BND_FLUCT )   { Chn[h].AmAc[i].Bd[j] = cpy; return false; }
             break;
     }
     // perform overlap check
-    if(EO_SegBead(Chn, h, i, j, 0, N_AA*N_CH, 0) == -1) {
+    if(EO_SegBead(sp, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 0) == -1) {
         Chn[h].AmAc[i].Bd[j] = cpy;
         return false;
     }
@@ -1754,63 +1762,63 @@ bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
     HBN_broken = -1; HBC_broken = -1; HBEnd_broken = -1;
     switch(j) {
         case 0:
-            if( HBList[h*N_AA+i][0] > -1 ) {
-                HBN_broken = HBList[h*N_AA+i][0];
-                HBList[HBList[h*N_AA+i][0]][1] = -1;
-                HBList[h*N_AA+i][0] = -1;
+            if( HBList[h*sp->N_AA+i][0] > -1 ) {
+                HBN_broken = HBList[h*sp->N_AA+i][0];
+                HBList[HBList[h*sp->N_AA+i][0]][1] = -1;
+                HBList[h*sp->N_AA+i][0] = -1;
                 deltaE += 1.0;
             }
-            if( i%N_AA != 0 ) {
-                if( HBList[h*N_AA+i-1][1] > -1 ) {
-                    HBC_broken = HBList[h*N_AA+i-1][1];
-                    HBList[HBList[h*N_AA+i-1][1]][0] = -1;
-                    HBList[h*N_AA+i-1][1] = -1;
+            if( i%sp->N_AA != 0 ) {
+                if( HBList[h*sp->N_AA+i-1][1] > -1 ) {
+                    HBC_broken = HBList[h*sp->N_AA+i-1][1];
+                    HBList[HBList[h*sp->N_AA+i-1][1]][0] = -1;
+                    HBList[h*sp->N_AA+i-1][1] = -1;
                     deltaE += 1.0;
                 }
             }
-            if( (i+1)%N_AA == 0 ) {
-                if( HBList[h*N_AA+i][1] > -1) {
-                    HBEnd_broken = HBList[h*N_AA+i][1];
-                    HBList[HBList[h*N_AA+i][1]][0] = -1;
-                    HBList[h*N_AA+i][1] = -1;
+            if( (i+1)%sp->N_AA == 0 ) {
+                if( HBList[h*sp->N_AA+i][1] > -1) {
+                    HBEnd_broken = HBList[h*sp->N_AA+i][1];
+                    HBList[HBList[h*sp->N_AA+i][1]][0] = -1;
+                    HBList[h*sp->N_AA+i][1] = -1;
                     deltaE += 1.0;
                 }
             }
             break;
         case 1:
-            if( HBList[h*N_AA+i][0] > -1 ) {
-                HBN_broken = HBList[h*N_AA+i][0];
-                HBList[HBList[h*N_AA+i][0]][1] = -1;
-                HBList[h*N_AA+i][0] = -1;
+            if( HBList[h*sp->N_AA+i][0] > -1 ) {
+                HBN_broken = HBList[h*sp->N_AA+i][0];
+                HBList[HBList[h*sp->N_AA+i][0]][1] = -1;
+                HBList[h*sp->N_AA+i][0] = -1;
                 deltaE += 1.0;
             }
-            if( HBList[h*N_AA+i][1] > -1 ) {
-                HBC_broken = HBList[h*N_AA+i][1];
-                HBList[HBList[h*N_AA+i][1]][0] = -1;
-                HBList[h*N_AA+i][1] = -1;
+            if( HBList[h*sp->N_AA+i][1] > -1 ) {
+                HBC_broken = HBList[h*sp->N_AA+i][1];
+                HBList[HBList[h*sp->N_AA+i][1]][0] = -1;
+                HBList[h*sp->N_AA+i][1] = -1;
                 deltaE += 1.0;
             }
             break;
         case 2:
-            if( HBList[h*N_AA+i][1] > -1 ) {
-                HBC_broken = HBList[h*N_AA+i][1];
-                HBList[HBList[h*N_AA+i][1]][0] = -1;
-                HBList[h*N_AA+i][1] = -1;
+            if( HBList[h*sp->N_AA+i][1] > -1 ) {
+                HBC_broken = HBList[h*sp->N_AA+i][1];
+                HBList[HBList[h*sp->N_AA+i][1]][0] = -1;
+                HBList[h*sp->N_AA+i][1] = -1;
                 deltaE += 1.0;
             }
-            if( (i+1)%N_AA != 0 ) {
-                if( HBList[h*N_AA+i+1][0] > -1 ) {
-                    HBN_broken = HBList[h*N_AA+i+1][0];
-                    HBList[HBList[h*N_AA+i+1][0]][1] = -1;
-                    HBList[h*N_AA+i+1][0] = -1;
+            if( (i+1)%sp->N_AA != 0 ) {
+                if( HBList[h*sp->N_AA+i+1][0] > -1 ) {
+                    HBN_broken = HBList[h*sp->N_AA+i+1][0];
+                    HBList[HBList[h*sp->N_AA+i+1][0]][1] = -1;
+                    HBList[h*sp->N_AA+i+1][0] = -1;
                     deltaE += 1.0;
                 }
             }
-            if( i%N_AA == 0 ) {
-                if( HBList[h*N_AA+i][0] > -1 ) {
-                    HBEnd_broken = HBList[h*N_AA+i][0];
-                    HBList[HBList[h*N_AA+i][0]][1] = -1;
-                    HBList[h*N_AA+i][0] = -1;
+            if( i%sp->N_AA == 0 ) {
+                if( HBList[h*sp->N_AA+i][0] > -1 ) {
+                    HBEnd_broken = HBList[h*sp->N_AA+i][0];
+                    HBList[HBList[h*sp->N_AA+i][0]][1] = -1;
+                    HBList[h*sp->N_AA+i][0] = -1;
                     deltaE += 1.0;
                 }
             }
@@ -1818,91 +1826,91 @@ bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
     // energy calculation
     switch(j) {
         case 0:
-            for( int k=0; k<N_CH*N_AA; k++ ) {
-                if( (h != k/N_AA) || ((h == k/N_AA) && (abs(h*N_AA+i-k) > 3)) ) {
-                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[0], Chn[k/N_AA].AmAc[k%N_AA].Bd[2]);
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                if( (h != k/sp->N_AA) || ((h == k/sp->N_AA) && (abs(h*sp->N_AA+i-k) > 3)) ) {
+                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[0], Chn[k/sp->N_AA].AmAc[k%sp->N_AA].Bd[2]);
                     distabs = dotPro(dist, dist);
-                    if( distabs < SW2HUGE )    { NCDist[h*N_AA+i][k] = distabs; }
-                    else                        { NCDist[h*N_AA+i][k] = -1; }
+                    if( distabs < SW2HUGE )    { NCDist[h*sp->N_AA+i][k] = distabs; }
+                    else                        { NCDist[h*sp->N_AA+i][k] = -1; }
                 }
-                if( HBcheck(Chn, h*N_AA+i, k) ) deltaE -= 1.0;
-                if(i>0) { if( HBcheck(Chn, k, h*N_AA+i-1) ) deltaE -= 1.0; }
-                if((i+1)%N_AA == 0) { if(HBcheck(Chn, k, h*N_AA+i)) deltaE -= 1.0; }
+                if( HBcheck(sp, Chn, h*sp->N_AA+i, k) ) deltaE -= 1.0;
+                if(i>0) { if( HBcheck(sp, Chn, k, h*sp->N_AA+i-1) ) deltaE -= 1.0; }
+                if((i+1)%sp->N_AA == 0) { if(HBcheck(sp, Chn, k, h*sp->N_AA+i)) deltaE -= 1.0; }
             }
             break;
         case 1:
-            for( int k=0; k<N_CH*N_AA; k++ ) {
-                if( HBcheck(Chn, h*N_AA+i, k) ) deltaE -= 1.0;
-                if( HBcheck(Chn, k, h*N_AA+i) ) deltaE -= 1.0;
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                if( HBcheck(sp, Chn, h*sp->N_AA+i, k) ) deltaE -= 1.0;
+                if( HBcheck(sp, Chn, k, h*sp->N_AA+i) ) deltaE -= 1.0;
             }
             break;
         case 2:
-            for( int k=0; k<N_CH*N_AA; k++ ) {
-                if( (h != k/N_AA) || ((h == k/N_AA) && (abs(h*N_AA+i-k) > 3)) ) {
-                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(Chn[h].AmAc[i].Bd[2], Chn[k/N_AA].AmAc[k%N_AA].Bd[0]);
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                if( (h != k/sp->N_AA) || ((h == k/sp->N_AA) && (abs(h*sp->N_AA+i-k) > 3)) ) {
+                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[h].AmAc[i].Bd[2], Chn[k/sp->N_AA].AmAc[k%sp->N_AA].Bd[0]);
                     distabs = dotPro(dist, dist);
-                    if( distabs < SW2HUGE )    { NCDist[k][h*N_AA+i] = distabs; }
-                    else                        { NCDist[k][h*N_AA+i] = -1; }
+                    if( distabs < SW2HUGE )    { NCDist[k][h*sp->N_AA+i] = distabs; }
+                    else                        { NCDist[k][h*sp->N_AA+i] = -1; }
                 }
-                if(i==0) { if(HBcheck(Chn, h*N_AA+i, k)) deltaE -= 1.0; }
-                if( HBcheck(Chn, k, h*N_AA+i) ) deltaE -= 1.0;
-                if(i<N_AA-1) { if( HBcheck(Chn, h*N_AA+i+1, k) ) deltaE -= 1.0; }
+                if(i==0) { if(HBcheck(sp, Chn, h*sp->N_AA+i, k)) deltaE -= 1.0; }
+                if( HBcheck(sp, Chn, k, h*sp->N_AA+i) ) deltaE -= 1.0;
+                if(i<sp->N_AA-1) { if( HBcheck(sp, Chn, h*sp->N_AA+i+1, k) ) deltaE -= 1.0; }
             }
             break;
         case 3:
-            deltaE += EO_SegBead(Chn, h, i, j, 0, N_CH*N_AA, 1) - Eold;
+            deltaE += EO_SegBead(sp, Chn, h, i, j, 0, sp->N_CH*sp->N_AA, 1) - Eold;
     }
     // previously broken HB can build new HB
     switch(j) {
         case 0:
-            if( HBList[h*N_AA+i][0] == HBN_broken ) HBN_broken = -1;
+            if( HBList[h*sp->N_AA+i][0] == HBN_broken ) HBN_broken = -1;
             if( i == 0 ) break;
-            if( HBList[h*N_AA+i-1][1] == HBC_broken ) HBC_broken = -1;
-            if( i == N_AA-1 ) { if( HBList[h*N_AA+i][1] == HBEnd_broken ) HBEnd_broken = -1; }
+            if( HBList[h*sp->N_AA+i-1][1] == HBC_broken ) HBC_broken = -1;
+            if( i == sp->N_AA-1 ) { if( HBList[h*sp->N_AA+i][1] == HBEnd_broken ) HBEnd_broken = -1; }
             break;
         case 1:
-            if( HBList[h*N_AA+i][0] == HBN_broken ) HBN_broken = -1;
-            if( HBList[h*N_AA+i][1] == HBC_broken ) HBC_broken = -1;
+            if( HBList[h*sp->N_AA+i][0] == HBN_broken ) HBN_broken = -1;
+            if( HBList[h*sp->N_AA+i][1] == HBC_broken ) HBC_broken = -1;
             break;
         case 2:
-            if( HBList[h*N_AA+i][1] == HBC_broken ) HBC_broken = -1;
-            if( i == N_AA-1 ) break;
-            if( HBList[h*N_AA+i+1][0] == HBN_broken ) HBN_broken = -1;
-            if( i == 0 ) { if( HBList[h*N_AA+i][0] == HBEnd_broken ) HBEnd_broken = -1; }
+            if( HBList[h*sp->N_AA+i][1] == HBC_broken ) HBC_broken = -1;
+            if( i == sp->N_AA-1 ) break;
+            if( HBList[h*sp->N_AA+i+1][0] == HBN_broken ) HBN_broken = -1;
+            if( i == 0 ) { if( HBList[h*sp->N_AA+i][0] == HBEnd_broken ) HBEnd_broken = -1; }
     }
     if( j != 3 ) {
         if( HBN_broken > -1 ) {
-            for( int k=0; k<N_CH*N_AA; k++ ) {
-                if( HBcheck(Chn, k, HBN_broken) ) deltaE -= 1.0;
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                if( HBcheck(sp, Chn, k, HBN_broken) ) deltaE -= 1.0;
             }
         }
         if( HBC_broken > -1 ) {
-            for( int k=0; k<N_AA; k++ ) {
-                if( HBcheck(Chn, HBC_broken, k) ) deltaE -= 1.0;
+            for( int k=0; k<sp->N_AA; k++ ) {
+                if( HBcheck(sp, Chn, HBC_broken, k) ) deltaE -= 1.0;
             }
         }
     }
     // HBEnd_broken
     if( i==0 && j==2 ) {
-        for( int k=0; k<N_CH*N_AA; k++ ) {
-            if( HBcheck(Chn, 0, k) ) deltaE -= 1.0;
+        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+            if( HBcheck(sp, Chn, 0, k) ) deltaE -= 1.0;
         }
         if( HBEnd_broken > -1 ) {
-            if( HBEnd_broken != HBList[h*N_CH][0] ) {
-                for( int k=0; k<N_CH*N_AA; k++ ) {
-                    if( HBcheck(Chn, k, HBEnd_broken) ) deltaE -= 1.0;
+            if( HBEnd_broken != HBList[h*sp->N_CH][0] ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    if( HBcheck(sp, Chn, k, HBEnd_broken) ) deltaE -= 1.0;
                 }
             }
         }
     }
-    if( i==N_AA-1 && j==0 ) {
-        for( int k=0; k<N_CH*N_AA; k++ ) {
-            if( HBcheck(Chn, k, N_AA-1) ) deltaE -= 1.0;
+    if( i==sp->N_AA-1 && j==0 ) {
+        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+            if( HBcheck(sp, Chn, k, sp->N_AA-1) ) deltaE -= 1.0;
         }
         if( HBEnd_broken > -1 ) {
-            if( HBEnd_broken != HBList[h*N_CH+N_AA-1][1] ) {
-                for( int k=0; k<N_CH*N_AA; k++ ) {
-                    if( HBcheck(Chn, HBEnd_broken, k) ) deltaE -= 1.0;
+            if( HBEnd_broken != HBList[h*sp->N_CH+sp->N_AA-1][1] ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    if( HBcheck(sp, Chn, HBEnd_broken, k) ) deltaE -= 1.0;
                 }
             }
         }
@@ -1911,30 +1919,30 @@ bool wiggle(Chain Chn[], int h, int i, int j, double &deltaE)
     return true;
 }
 // rotation around N-Ca axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
-bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
+bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
 {
-    Bead Bdcpy[4*N_AA*N_CH];                                // copy of rotated beads
+    Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
     double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
     double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
     double rotMtrx[3][3];                                   // rotation matrix
     double n[3], dVec[3], newpos[3], com[3], shift[3];
-    int BrokenHB[N_AA*N_CH][2], nBHB;                       // list of broken HB
+    int BrokenHB[sypa->N_AA*sypa->N_CH][2], nBHB;                       // list of broken HB
     int sp, ep, spHB, epHB;                                 // start and end of rotated chain segment
 
     // calculate Eold
-    sp = (high == 0) ? ((i1/N_AA)*N_AA):i1;                 // identify start of rotated chain segment
-    ep = (high == 0) ? (i1):(((i1/N_AA)+1)*N_AA);           // identify end of rotated chain segment
-    Eold = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1);
+    sp = (high == 0) ? ((i1/sypa->N_AA)*sypa->N_AA):i1;                 // identify start of rotated chain segment
+    ep = (high == 0) ? (i1):(((i1/sypa->N_AA)+1)*sypa->N_AA);           // identify end of rotated chain segment
+    Eold = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1);
     // copy relevant part of the chain
     for( int i=sp; i<ep; i++ ) {
         for( int j=0; j<4; j++ ) {
-            Bdcpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+            Bdcpy[i*4+j] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j];
         }
     }
 
     angle = DPHI_MAX*RND();
     cos_a = cos(angle); sin_a = sin(angle);
-    std::tie(n[0], n[1], n[2]) = distVecBC(Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0], Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1]);  nsqrt = absVec(n);
+    std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[0], Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1]);  nsqrt = absVec(n);
     n[0] /= nsqrt;  n[1] /= nsqrt;  n[2] /= nsqrt;
     if( high==0 ) { n[0] *= -1; n[1] *= -1; n[2] *= -1; }     // -n for low? is this nessessary to keep rotation angle distribution uniform?
     rotMtrx[0][0] = cos_a + n[0]*n[0]*(1-cos_a);
@@ -1948,24 +1956,24 @@ bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
     rotMtrx[2][2] = cos_a + n[2]*n[2]*(1-cos_a);
 
     if( high == 0 ) {
-        for( int i=(i1/N_AA)*N_AA; i<i1; i++ ) {
+        for( int i=(i1/sypa->N_AA)*sypa->N_AA; i<i1; i++ ) {
             for( int j=0; j<4; j++ ) {
                 for( int k=0; k<3; k++ ) {
-                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getBC(k) );
+                    dVec[k] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getR(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[0].getR(k) + L*(Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getBC(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[0].getBC(k) );
                 }
                 for( int k=0; k<3; k++ ) {
                     // periodic boundary conditions here and in high.
-                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getR(k);
-                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[0].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[0].getR(k);
+                    Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setBC( k, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[0].getBC(k) + floor(newpos[k]/L) );
                     newpos[k] = newpos[k] - L*floor(newpos[k]/L);
                 }
-                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
                 
                 // overlapp check
-                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, (i1/N_AA)*N_AA, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, i1, N_CH*N_AA, 0) == -1 ) {
-                    for( int k=(i/N_AA)*N_AA; k<i+1; k++ ) {
+                if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, (i1/sypa->N_AA)*sypa->N_AA, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, i1, sypa->N_CH*sypa->N_AA, 0) == -1 ) {
+                    for( int k=(i/sypa->N_AA)*sypa->N_AA; k<i+1; k++ ) {
                         for( int m=0; m<4; m++ ) {
-                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                            Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
                         }
                     }
                     return false;
@@ -1974,23 +1982,23 @@ bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
         }
     }
     else if( high == 1 ) {
-        for( int i=i1; i<((i1/N_AA)+1)*N_AA; i++ ) {
+        for( int i=i1; i<((i1/sypa->N_AA)+1)*sypa->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
                 for( int k=0; k<3; k++ ) {
-                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k) + L*( Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) );
+                    dVec[k] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getR(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getR(k) + L*( Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getBC(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getBC(k) );
                 }
                 for( int k=0; k<3; k++ ) {
-                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k);
-                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getR(k);
+                    Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setBC( k, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
                     newpos[k] = newpos[k] - L*floor(newpos[k]/L);
                 }
-                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
                 
                 // overlapp check
-                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, i1, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, ((i1/N_AA)+1)*N_AA, N_CH*N_AA, 0) == -1 ) {
+                if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, i1, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ((i1/sypa->N_AA)+1)*sypa->N_AA, sypa->N_CH*sypa->N_AA, 0) == -1 ) {
                     for( int k=i1; k<i+1; k++ ) {
                         for( int m=0; m<4; m++ ) {
-                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                            Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
                         }
                     }
                     return false;
@@ -2026,14 +2034,14 @@ bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
     }
     // close new HB
     for( int m=sp; m<epHB; m++ ) {
-        for( int n=0; n<N_CH*N_AA; n++ ) {
+        for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
             if( n >= spHB && n < ep ) continue;
-            if( (m/N_AA != n/N_AA) || (( m/N_AA == n/N_AA) && (abs(m-n) > 3)) ) {
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[0], Chn[n/N_AA].AmAc[n%N_AA].Bd[2]);
+            if( (m/sypa->N_AA != n/sypa->N_AA) || (( m/sypa->N_AA == n/sypa->N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[0], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[2]);
                 distabs = dotPro(dVec, dVec);
                 if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
                 else                        { NCDist[m][n] = -1; }
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[2], Chn[n/N_AA].AmAc[n%N_AA].Bd[0]);
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[2], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[0]);
                 distabs = dotPro(dVec, dVec);
                 if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
                 else                        { NCDist[n][m] = -1; }
@@ -2042,54 +2050,54 @@ bool rotPhi(Chain Chn[], int i1, int high, double &deltaE)
                 NCDist[m][n] = -1;
                 NCDist[n][m] = -1;
             }
-            if(HBcheck(Chn, m, n)) dEhb -= 1.0;
-            if(HBcheck(Chn, n, m)) dEhb -= 1.0;
+            if(HBcheck(sypa, Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
         }
     }
     // ATTENTION: extra conditions and situations would have to be applied here as well
     if( nBHB >= 0 ) {       // previously broken HB can rebond
         for( int i=0; i<nBHB+1; i++ ) {
-            for( int j=0; j<N_CH*N_AA; j++ ) {
-                if(HBcheck(Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
-                if(HBcheck(Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
+                if(HBcheck(sypa, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(sypa, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
             }
         }
     }
     for( int i=sp; i<ep; i++ ) {
         for( int j=0; j<4; j++ ) {
-            LinkListUpdate(Chn, i, j);
+            LinkListUpdate(sypa, Chn, i, j);
         }
     }
     // SC interactions
-    deltaE = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // rotation around Ca-C axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
-bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
+bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
 {
-    Bead Bdcpy[4*N_AA*N_CH];                                // copy of rotated beads
+    Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
     double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
     double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
     double rotMtrx[3][3];                                   // rotation matrix
     double n[3], dVec[3], newpos[3], com[3], shift[3];
-    int BrokenHB[N_AA*N_CH][2], nBHB;                       // list of broken HB
+    int BrokenHB[sypa->N_AA*sypa->N_CH][2], nBHB;                       // list of broken HB
     int sp, ep, spHB, epHB;                                 // start and end of rotated chain segment
 
     // calculate Eold
-    sp = (high == 0) ? ((i1/N_AA)*N_AA):(i1+1);             // identify start of rotated chain segment
-    ep = (high == 0) ? (i1+1):(((i1/N_AA)+1)*N_AA);         // identify end of rotated chain segment
-    Eold = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1);
+    sp = (high == 0) ? ((i1/sypa->N_AA)*sypa->N_AA):(i1+1);             // identify start of rotated chain segment
+    ep = (high == 0) ? (i1+1):(((i1/sypa->N_AA)+1)*sypa->N_AA);         // identify end of rotated chain segment
+    Eold = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1);
     // copy relevant part of the chain
     for( int i=sp; i<ep; i++ ) {
         for( int j=0; j<4; j++ ) {
-            Bdcpy[i*4+j] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j];
+            Bdcpy[i*4+j] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j];
         }
     }
 
     angle = DPSI_MAX*RND();
     cos_a = cos(angle); sin_a = sin(angle);
-    std::tie(n[0], n[1], n[2]) = distVecBC(Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1], Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2]);  nsqrt = absVec(n);
+    std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1], Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[2]);  nsqrt = absVec(n);
     n[0] /= nsqrt;  n[1] /= nsqrt;  n[2] /= nsqrt;
     if( high==0 ) { n[0] = -n[0]; n[1] = -n[1]; n[2] = -n[2]; }     // -n for low? is this nessessary to keep rotation angle distribution uniform?
     rotMtrx[0][0] = cos_a + n[0]*n[0]*(1-cos_a);
@@ -2103,24 +2111,24 @@ bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
     rotMtrx[2][2] = cos_a + n[2]*n[2]*(1-cos_a);
 
     if( high == 0 ) {
-        for( int i=(i1/N_AA)*N_AA; i<i1+1; i++ ) {
+        for( int i=(i1/sypa->N_AA)*sypa->N_AA; i<i1+1; i++ ) {
             for( int j=0; j<4; j++ ) {
                 for( int k=0; k<3; k++ ) {
-                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) );
+                    dVec[k] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getR(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getR(k) + L*(Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getBC(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getBC(k) );
                 }
                 for( int k=0; k<3; k++ ) {
                     // periodic boundary conditions here and in high.
-                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getR(k);
-                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getR(k);
+                    Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setBC( k, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[1].getBC(k) + floor(newpos[k]/L) );
                     newpos[k] = newpos[k] - L*floor(newpos[k]/L);
                 }
-                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
                 
                 // overlapp check
-                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, (i1/N_AA)*N_AA, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, i1, N_CH*N_AA, 0) == -1 ) {
-                    for( int k=(i/N_AA)*N_AA; k<i+1; k++ ) {
+                if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, (i1/sypa->N_AA)*sypa->N_AA, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, i1, sypa->N_CH*sypa->N_AA, 0) == -1 ) {
+                    for( int k=(i/sypa->N_AA)*sypa->N_AA; k<i+1; k++ ) {
                         for( int m=0; m<4; m++ ) {
-                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                            Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
                         }
                     }
                     return false;
@@ -2129,23 +2137,23 @@ bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
         }
     }
     else if( high == 1 ) {
-        for( int i=i1+1; i<((i1/N_AA)+1)*N_AA; i++ ) {
+        for( int i=i1+1; i<((i1/sypa->N_AA)+1)*sypa->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
                 for( int k=0; k<3; k++ ) {
-                    dVec[k] = Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getR(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getR(k) + L*(Chn[i/N_AA].AmAc[i%N_AA].Bd[j].getBC(k) - Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getBC(k) );
+                    dVec[k] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getR(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[2].getR(k) + L*(Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getBC(k) - Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[2].getBC(k) );
                 }
                 for( int k=0; k<3; k++ ) {
-                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getR(k);
-                    Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setBC( k, Chn[i1/N_AA].AmAc[i1%N_AA].Bd[2].getBC(k) + floor(newpos[k]/L) );
+                    newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[2].getR(k);
+                    Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setBC( k, Chn[i1/sypa->N_AA].AmAc[i1%sypa->N_AA].Bd[2].getBC(k) + floor(newpos[k]/L) );
                     newpos[k] = newpos[k] - L*floor(newpos[k]/L);
                 }
-                Chn[i/N_AA].AmAc[i%N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+                Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
                 
                 // overlapp check
-                if( EO_SegBead(Chn, i/N_AA, i%N_AA, j, 0, i1+1, 0) == -1 || EO_SegBead(Chn, i/N_AA, i%N_AA, j, ((i/N_AA)+1)*N_AA, N_CH*N_AA, 0 ) ) {
+                if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, i1+1, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ((i/sypa->N_AA)+1)*sypa->N_AA, sypa->N_CH*sypa->N_AA, 0 ) ) {
                     for( int k=i1+1; k<i+1; k++ ) {
                         for( int m=0; m<4; m++ ) {
-                            Chn[k/N_AA].AmAc[k%N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                            Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
                         }
                     }
                     return false;
@@ -2181,14 +2189,14 @@ bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
     }
     // close new HB
     for( int m=spHB; m<ep; m++ ) {
-        for( int n=0; n<N_CH*N_AA; n++ ) {
+        for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
             if( n >= sp && n < epHB) continue;
-            if( (m/N_AA != n/N_AA) || (( m/N_AA == n/N_AA) && (abs(m-n) > 3)) ) {
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[0], Chn[n/N_AA].AmAc[n%N_AA].Bd[2]);
+            if( (m/sypa->N_AA != n/sypa->N_AA) || (( m/sypa->N_AA == n/sypa->N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[0], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[2]);
                 distabs = dotPro(dVec, dVec);
                 if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
                 else                        { NCDist[m][n] = -1; }
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[m/N_AA].AmAc[m%N_AA].Bd[2], Chn[n/N_AA].AmAc[n%N_AA].Bd[0]);
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[2], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[0]);
                 distabs = dotPro(dVec, dVec);
                 if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
                 else                        { NCDist[n][m] = -1; }
@@ -2197,48 +2205,48 @@ bool rotPsi(Chain Chn[], int i1, int high, double &deltaE)
                 NCDist[m][n] = -1;
                 NCDist[n][m] = -1;
             }
-            if(HBcheck(Chn, m, n)) dEhb -= 1.0;
-            if(HBcheck(Chn, n, m)) dEhb -= 1.0;
+            if(HBcheck(sypa, Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
         }
     }
     // ATTENTION: extra conditions and situations would have to be applied here as well
     if( nBHB >= 0 ) {       // previously broken HB can rebond
         for( int i=0; i<nBHB+1; i++ ) {
-            for( int j=0; j<N_CH*N_AA; j++ ) {
-                if(HBcheck(Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
-                if(HBcheck(Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
+                if(HBcheck(sypa, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(sypa, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
             }
         }
     }
     for( int i=sp; i<ep; i++ ) {
         for( int j=0; j<4; j++ ) {
-            LinkListUpdate(Chn, i, j);
+            LinkListUpdate(sypa, Chn, i, j);
         }
     }
     // SC interactions
-    deltaE = EO_SegSeg(Chn, sp, ep, 0, sp, 1) + EO_SegSeg(Chn, sp, ep, ep, N_CH*N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // translation move of a whole chain
-bool translation(Chain Chn[], int iChn, double &deltaE)
+bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
 {
-    Bead Bdcpy[4*N_AA];                 // copy of beads in moved chain
+    Bead Bdcpy[4*sp->N_AA];                 // copy of beads in moved chain
     double dVec[3], newpos[3];          // displacement vector, new position (before PBC)
     double Eold, dEhb, distabs;
-    int BrokenHB[N_AA][2], nBHB;
+    int BrokenHB[sp->N_AA][2], nBHB;
 
-    for( int i=0; i<N_AA; i++ ) {
+    for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
             Bdcpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
         }
     }
-    Eold = EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, 0, iChn*N_AA, 1) + EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, (iChn+1)*N_AA, N_CH*N_AA, 1);
+    Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, N_CH*sp->N_AA, 1);
     for( int i=0; i<3; i++ ) {
         dVec[i] = RND()*(double)L/2.0;
     }
 
-    for( int i=0; i<N_AA; i++ ) {
+    for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
             for( int k=0; k<3; k++ ) {
                 newpos[k] = Chn[iChn].AmAc[i].Bd[j].getR(k) + dVec[k];
@@ -2247,7 +2255,7 @@ bool translation(Chain Chn[], int iChn, double &deltaE)
             }
             Chn[iChn].AmAc[i].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
             // overlapp check
-            if( EO_SegBead(Chn, iChn, i, j, 0, iChn*N_AA, 0) == -1 || EO_SegBead(Chn, iChn, i, j, (iChn+1)*N_AA, N_CH*N_AA, 0) == -1 ) {
+            if( EO_SegBead(sp, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0) == -1 || EO_SegBead(sp, Chn, iChn, i, j, (iChn+1)*sp->N_AA, N_CH*sp->N_AA, 0) == -1 ) {
                 for( int m=0; m<i+1; m++ ) {
                     for( int n=0; n<4; n++ ) {
                         Chn[iChn].AmAc[m].Bd[n] = Bdcpy[m*4+n];     // reset chain & exit
@@ -2261,15 +2269,15 @@ bool translation(Chain Chn[], int iChn, double &deltaE)
     //break old HB
     nBHB = -1;
     dEhb = 0.0;
-    for( int i=iChn*N_AA; i<(iChn+1)*N_AA; i++ ) {
-        if( (HBList[i][0] < iChn*N_AA || HBList[i][0] >= (iChn+1)*N_AA ) && HBList[i][0] > -1 ) {
+    for( int i=iChn*sp->N_AA; i<(iChn+1)*sp->N_AA; i++ ) {
+        if( (HBList[i][0] < iChn*sp->N_AA || HBList[i][0] >= (iChn+1)*sp->N_AA ) && HBList[i][0] > -1 ) {
             BrokenHB[++nBHB][0] = i;
             BrokenHB[nBHB][1] = HBList[i][0];
             HBList[HBList[i][0]][1] = -1;
             HBList[i][0] = -1;
             dEhb += 1.0;
         }
-        if( (HBList[i][1] < iChn*N_AA || HBList[i][1] >= (iChn+1)*N_AA ) && HBList[i][1] > -1 ) {
+        if( (HBList[i][1] < iChn*sp->N_AA || HBList[i][1] >= (iChn+1)*sp->N_AA ) && HBList[i][1] > -1 ) {
             BrokenHB[++nBHB][1] = i;
             BrokenHB[nBHB][0] = HBList[i][1];
             HBList[HBList[i][1]][0] = -1;
@@ -2278,42 +2286,42 @@ bool translation(Chain Chn[], int iChn, double &deltaE)
         }
     }
     // close new HB
-    for( int i=0; i<N_AA; i++ ) {
-        for( int j=0; j<N_CH*N_AA; j++ ) {
-            if( j/N_AA == iChn ) continue;
-            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[iChn].AmAc[i].Bd[0], Chn[j/N_AA].AmAc[j%N_AA].Bd[2]);
+    for( int i=0; i<sp->N_AA; i++ ) {
+        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+            if( j/sp->N_AA == iChn ) continue;
+            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sp, Chn[iChn].AmAc[i].Bd[0], Chn[j/sp->N_AA].AmAc[j%sp->N_AA].Bd[2]);
             distabs = dotPro(dVec, dVec);
-            if( distabs < SW2HUGE ) { NCDist[iChn*N_AA+i][j] = distabs; }
-            else                    { NCDist[iChn*N_AA+i][j] = -1; }
-            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(Chn[iChn].AmAc[i].Bd[2], Chn[j/N_AA].AmAc[j%N_AA].Bd[0]);
+            if( distabs < SW2HUGE ) { NCDist[iChn*sp->N_AA+i][j] = distabs; }
+            else                    { NCDist[iChn*sp->N_AA+i][j] = -1; }
+            std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sp, Chn[iChn].AmAc[i].Bd[2], Chn[j/sp->N_AA].AmAc[j%sp->N_AA].Bd[0]);
             distabs = dotPro(dVec, dVec);
-            if( distabs < SW2HUGE ) { NCDist[j][iChn*N_AA+i] = distabs; }
-            else                    { NCDist[j][iChn*N_AA+i] = -1; }
-            if( HBcheck(Chn, iChn*N_AA+i, j) )  dEhb -= 1.0;
-            if( HBcheck(Chn, j, iChn*N_AA+i) )  dEhb -= 1.0;
+            if( distabs < SW2HUGE ) { NCDist[j][iChn*sp->N_AA+i] = distabs; }
+            else                    { NCDist[j][iChn*sp->N_AA+i] = -1; }
+            if( HBcheck(sp, Chn, iChn*sp->N_AA+i, j) )  dEhb -= 1.0;
+            if( HBcheck(sp, Chn, j, iChn*sp->N_AA+i) )  dEhb -= 1.0;
         }
     }
     // previously broken HB can rebond
     if( nBHB > -1 ) {
         for( int i=0; i<nBHB+1; i++) {
-            for( int j=0; j<N_CH*N_AA; j++ ) {
-                if( HBcheck(Chn, BrokenHB[i][0], j) )   dEhb -= 1.0;
-                if( HBcheck(Chn, j, BrokenHB[i][1]) )   dEhb -= 1.0;
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                if( HBcheck(sp, Chn, BrokenHB[i][0], j) )   dEhb -= 1.0;
+                if( HBcheck(sp, Chn, j, BrokenHB[i][1]) )   dEhb -= 1.0;
             }
         }
     }
-    for( int i=0; i<N_AA; i++ ) {
+    for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
-            LinkListUpdate(Chn, iChn*N_AA+i, j);
+            LinkListUpdate(sp, Chn, iChn*sp->N_AA+i, j);
         }
     }
 
-    deltaE = EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, 0, iChn*N_AA, 1) + EO_SegSeg(Chn, iChn*N_AA, (iChn+1)*N_AA, (iChn+1)*N_AA, N_CH*N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, N_CH*sp->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // check all bond lenght from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
-bool checkBndLngth(Chain Chn[], int sp, int ep)
+bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep)
 {
     double distV[3];
     double dist2;
@@ -2321,62 +2329,62 @@ bool checkBndLngth(Chain Chn[], int sp, int ep)
 
     res = true;
     for( int i=sp; i<ep; i++ ) {
-        if( (i+1)%N_AA != 0 ) {
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[1]);
+        if( (i+1)%sypa->N_AA != 0 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i, BND_NCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i, PBND_NC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[0], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(0), BND_FLUCT, absVec(distV) );
+                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0), BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[i%N_AA].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i, BND_CaC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(1), BND_FLUCT, absVec(distV) );
+                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1), BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[0]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / PBND_CaN - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i+1, PBND_CaN, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[1], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[1]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CaCa - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i+1, PBND_CaCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[i%N_AA].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[i%N_AA].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        i, i, Chn[i/N_AA].AmAc[i%N_AA].getDisR(2), BND_FLUCT, absVec(distV) );
+                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2), BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[0]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / BND_CN - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i+1, BND_CN, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[i%N_AA].Bd[2], Chn[i/N_AA].AmAc[(i+1)%N_AA].Bd[1]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CCa - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
                         i, i+1, PBND_CCa, BND_FLUCT, absVec(distV) );
@@ -2384,40 +2392,40 @@ bool checkBndLngth(Chain Chn[], int sp, int ep)
             }
         }
         else {
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[1]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, BND_NCa, BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, BND_NCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, PBND_NC, BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, PBND_NC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[0], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(0), BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0), BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[1], Chn[i/N_AA].AmAc[N_AA-1].Bd[2]);
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, BND_CaC, BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, BND_CaC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[1], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(1), BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1), BND_FLUCT, absVec(distV) );
                         res = false;
             }
-            std::tie(distV[0], distV[1], distV[2]) = distVecBC(Chn[i/N_AA].AmAc[N_AA-1].Bd[2], Chn[i/N_AA].AmAc[N_AA-1].Bd[3]);
-            if( abs( absVec(distV) / Chn[i/N_AA].AmAc[N_AA-1].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
+            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
+            if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
                 printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
-                        N_AA-1, N_AA-1, Chn[i/N_AA].AmAc[N_AA-1].getDisR(2), BND_FLUCT, absVec(distV) );
+                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2), BND_FLUCT, absVec(distV) );
                         res = false;
             }
         }
@@ -2429,20 +2437,20 @@ bool checkBndLngth(Chain Chn[], int sp, int ep)
 //          XXXXXXXXXXX  MAINTENANCE FUNCTIONS  XXXXXXXXXX
 
 // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
-bool resetBCcouter(Chain Chn[]) 
+bool resetBCcouter(SysPara *sp, Chain Chn[]) 
 {
     double highestBC[3];
 
-    for( int i=0; i<N_CH; i++ ) {
+    for( int i=0; i<sp->N_CH; i++ ) {
         highestBC[0] = 0;  highestBC[1] = 0; highestBC[2] = 0;
-        for( int j=0; j<N_AA*4; j++ ) {
+        for( int j=0; j<sp->N_AA*4; j++ ) {
             for( int k=0; k<3; k++ ) {
                 if( abs(Chn[i].AmAc[j/4].Bd[j%4].getBC(k)) > abs(highestBC[k]) ) {
                     highestBC[k] = Chn[i].AmAc[j/4].Bd[j%4].getBC(k);
                 }
             }
         }
-        for( int j=0; j<N_AA*4; j++ ) {
+        for( int j=0; j<sp->N_AA*4; j++ ) {
             //Chn[i].AmAc[j/4].Bd[j%4].setR( Chn[i].AmAc[j/4].Bd[j%4].getR(0) - highestBC[0]*L, Chn[i].AmAc[j/4].Bd[j%4].getR(1) - highestBC[1]*L, Chn[i].AmAc[j/4].Bd[j%4].getR(2) - highestBC[2]*L );
             for( int k=0; k<3; k++ ) {
                 Chn[i].AmAc[j/4].Bd[j%4].addBC(k, highestBC[k]);
@@ -2466,7 +2474,7 @@ int assignBox(Bead Bd)
     return Box;
 }
 // update linked list (neighbour list) -> insert AmAc[i1].Bd[j1]
-int LinkListInsert(Chain Chn[], int i1, int j1)
+int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1)
 {
     int start, i, prev, next;
     next = neighHead[Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox()];
@@ -2491,14 +2499,14 @@ int LinkListInsert(Chain Chn[], int i1, int j1)
     return -1;
 }
 // update Linked List position of Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1]
-int LinkListUpdate(Chain Chn[], int i1, int j1)
+int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1)
 {
     int oldBox;
     int prevNei, nextNei;
 
-    oldBox = Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox();
-    Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].setBox(assignBox( Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1] ));
-    if( oldBox != Chn[i1/N_AA].AmAc[i1%N_AA].Bd[j1].getBox() ) {
+    oldBox = Chn[i1/sp->N_AA].AmAc[i1%sp->N_AA].Bd[j1].getBox();
+    Chn[i1/sp->N_AA].AmAc[i1%sp->N_AA].Bd[j1].setBox(assignBox( Chn[i1/sp->N_AA].AmAc[i1%sp->N_AA].Bd[j1] ));
+    if( oldBox != Chn[i1/sp->N_AA].AmAc[i1%sp->N_AA].Bd[j1].getBox() ) {
         prevNei = neighHead[ oldBox ];
         if( prevNei == i1*4+j1 ) {
             neighHead[ oldBox ] = neighList[ prevNei ];
@@ -2516,7 +2524,7 @@ int LinkListUpdate(Chain Chn[], int i1, int j1)
                 prevNei = nextNei;
             }
         }
-        LinkListInsert(Chn, i1, j1);
+        LinkListInsert(sp, Chn, i1, j1);
         //printf("\t\tneighlist was updated:\t\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\tnewBox=%3d\n", i1, j1, i1*4+j1, oldBox, AmAc[i1].Bd[j1].getBox());
     }
     else

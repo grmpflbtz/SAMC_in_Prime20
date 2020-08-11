@@ -1,8 +1,8 @@
 /* FILE: prime20_samc_para.h
  * 
- *        :'''''''''''''''''''''''''''''''':
- *        :  Parameters of Prime20 HEADER  :
- *        :................................:
+ *        :'''''''''''''''''''''''''''''''''''''''''''':
+ *        :  Topological Parameters of Prime20 HEADER  :
+ *        :............................................:
  * 
  */
 #ifndef PRIME20_SAMC_PARA_HPP
@@ -11,7 +11,7 @@
 #include "prime20_samc_chain.hpp"
 
 //-------------------------------------------------------------
-//                    >>  PARAMETERS  <<
+//               >>  TOPOLOGICAL PARAMETERS  <<
 
 //Backbone Bond lengths
 const double BND_NCa = 1.460;

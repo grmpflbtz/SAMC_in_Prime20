@@ -54,6 +54,7 @@ struct Header {
     std::string confnm;     // configuration input file name
     std::string paranm;     // parameter input file name
     std::string dbposi;     // debug position output file name
+    std::string lngEnm;     // ln g(E) input file name
 };
 
 

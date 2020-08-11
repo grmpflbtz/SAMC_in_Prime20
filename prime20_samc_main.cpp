@@ -108,7 +108,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum);                            
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
-bool extra_lngE(SysPara *sp, string inputFile, double lngE[]);                          // reads lngE data from file
+bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                          // reads lngE data from file
 bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode);                  // writes positions to file "name"
 bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
         tcont = 0;
     }
     // check if there is an extra input file for lngE
-    if( extra_lngE(sp, "input.lng", lngE ) ) {
+    if( extra_lngE(sp, hd, lngE ) ) {
         tcont = 0;
         if(sp->MEASURE) {
             if(sp->HB_CONTMAT) {
@@ -889,6 +889,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->confnm = "config_ini.xyz";
     hd->paranm = "Sys_param.dat";
     hd->dbposi = "AnorLondo.xyz";
+    hd->lngEnm = "lngE_input.dat";
 
     //reading arguments
     for( int i=1; i<argc; i+=2 ) {
@@ -900,6 +901,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
             hd->paranm = opt2; }
         if( opt1.compare("-d") == 0 ) {
             hd->dbposi = opt2; }
+        if( opt1.compare("-l") == 0 ) {
+            hd->lngEnm = opt2; }
     }
 
     return 0;
@@ -1284,7 +1287,7 @@ bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[],
     return false;
 }
 // reads lngE data from file
-bool extra_lngE(SysPara *sp, string inputFile, double lngE[])
+bool extra_lngE(SysPara *sp, Header *hd, double lngE[])
 {
     ifstream input;
     std::string s_line;
@@ -1292,12 +1295,12 @@ bool extra_lngE(SysPara *sp, string inputFile, double lngE[])
     long unsigned int H;
     double Ebin1, Ebin2;
 
-    input.open(inputFile);
+    input.open(hd->lngEnm);
     if( input.is_open() ) {
-        std::cout << "reading extra lngE from input file '" << inputFile << "'" << std::endl;
+        std::cout << "reading lngE from input file '" << hd->lngEnm << "'" << std::endl;
         getline(input, s_line);
         if(s_line[0] != 'b') {
-            std::cout << "unexpected character at start of line in file '" << inputFile << "': expected 'b', instead '" << s_line[0] << std::endl;
+            std::cout << "unexpected character at start of line in file '" << hd->lngEnm << "': expected 'b', instead '" << s_line[0] << std::endl;
             input.close();
             return false;
         }
@@ -1320,7 +1323,7 @@ bool extra_lngE(SysPara *sp, string inputFile, double lngE[])
         return true;
     }
 
-    std::cout << "unable to open input file '" << inputFile << "'" << std::endl;
+    std::cout << "unable to open input file '" << hd->lngEnm << "'" << std::endl;
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)

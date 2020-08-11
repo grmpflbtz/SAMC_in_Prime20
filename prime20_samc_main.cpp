@@ -81,60 +81,14 @@ using namespace std;
 //XXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   SIMULATION PARAMETERS - GLOBAL VARIABLES   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-int N_CH;                                // number of chains in system
-int N_AA;                         // number of amino acids in chains
-string AA_seq;
-double L;                      // side length of cubic simulation cell
-
-int NBin;                        // number of energy bins for histogram
-double EMin;
-double EMax;
-double BinW;
-double EStart;                 // energy below which the sim ends the preSAMC moves
-int tStart;                       // minimum number of preSAMC moves
-
-int nstep;
-//const int nstep = 8*N_AA*N_CH;
-unsigned long int T_0;
-unsigned long int T_MAX;
-unsigned long int T_WRITE;
-unsigned long int T_BC_RESET;
-
-double GAMMA_0;
-
-int NBOX;
-double LBOX;                  // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
-
 int *neighHead;
 int *neighList;
-//int neighHead[NBOX*NBOX*NBOX], neighList[4*N_AA*N_CH];
 
 int **HBList;
 int **HBLcpy;
-//int HBList[N_CH*N_AA][2], HBLcpy[N_CH*N_AA][2];                         // BB HB contact list. value is bond partner amino acid (-1 if no HB). column order [N][C]
+
 double **NCDist;
 double **NCDcpy;
-//double NCDist[N_CH*N_AA][N_CH*N_AA], NCDcpy[N_CH*N_AA][N_CH*N_AA];      // N_CH*N_AA x N_CH*N_AA matrix of N-C distances squared
-
-//Random selection weights of moves.
-int WT_WIGGLE;              // weight wiggle
-int WT_PHI;                  // weight rotPhi
-int WT_PSI;                  // weight rotPsi
-int WT_TRANS;                 // weight translation
-int WT_ROSENC;
-int WT_ROSENN;
-// movement restraints
-double DISP_MAX;
-double DPHI_MAX;
-double DPSI_MAX;
-
-bool EBIN_TRUNC_UP;        // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
-bool MEASURE;
-    bool HB_CONTMAT;
-    bool WRITE_CONFIG;
-        int CONFIG_N;
-        double *CONFIG_ENER;
-        double CONFIG_VAR;
 
 mt19937 rng(time(NULL));                // constructor for random number generator
 //mt19937 rng(2);                        // debug
@@ -146,40 +100,42 @@ mt19937 rng(time(NULL));                // constructor for random number generat
 double dotPro(double vecA[], double vecB[]);                                            // dot product
 double absVec(double vec[]);                                                            // absolute of vector
 tuple<double,double,double> crossPro(double vecA[], double vecB[]);                     // cross product
-tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB);                            // distance vector
+tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB);               // distance vector
 double RND();                                                                           // RNG generating double (-1,1)
-void ConsoleOutputHead(SysPara *sp);                                                               // writes simulation head to console
-bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                                 // creates new chain
-bool readParaInput(Chain Chn[]);                                                        // read system arameters from file
-bool readCoord(SysPara *sp, Chain Chn[], string inputFile);                                          // read chain config from file
+int CommandInitialize(int argc, char *argv[], Header *hd);                              // identify file names from command input
+void ConsoleOutputHead(SysPara *sp);                                                    // writes simulation head to console
+bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
+bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
+bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
-bool extra_lngE(SysPara *sp, string inputFile, double lngE[]);                                       // reads lngE data from file
-bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode);                               // writes positions to file "name"
+bool extra_lngE(SysPara *sp, string inputFile, double lngE[]);                          // reads lngE data from file
+bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode);                  // writes positions to file "name"
 bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
-bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                              // check if HB exists and update HBList
+bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
-double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch);   // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
 double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
-double E_check(SysPara *sp, Chain Chn[]);                                                            // recalculate energy from scratch
+double E_check(SysPara *sp, Chain Chn[]);                                               // recalculate energy from scratch
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
-bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);                          // small displacement of Chn[h].AmAc[i].Bd[j]
-bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);                             // rotation around N_AA-Ca axis of i1-th amino acid
-bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);                             // rotation around Ca-C axis of i1-th amino acid
-bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                                // translation move of the whole chain
-bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                                        // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
-bool resetBCcouter(SysPara *sp, Chain Chn[]);                                                        // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
-int assignBox(SysPara *sp, Bead Bd);                                                                 // assigns neighbour list box to bead
-int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                                        // insert particle AmAc[i1].Bd[j1] into Linked List
-int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                                        // update Linked List position of AmAc[i1].Bd[j1]
+bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
+bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around N_AA-Ca axis of i1-th amino acid
+bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around Ca-C axis of i1-th amino acid
+bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
+bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
+int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
+int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
+int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-int main() 
+int main(int argc, char *argv[]) 
 {
-    SysPara *sp = new SysPara;                              // structure containing system parameters
+    SysPara *sp = new SysPara;                              // system parameters
+    Header *hd = new Header;                                // file names for input/output
 
     Timer Timer;                                            // timer for simulation
     Chain *Chn;                                             // chains in system
@@ -204,91 +160,12 @@ int main()
     int *conf_n, *conf_write_t;                             // number of configurations written for the selcted energy and last time writing a config for this energy
     double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
 
-    sp->N_CH = 2;
-    sp->N_AA = 14;
-    sp->L = 100.0;
-    sp->AA_seq = "QQQQQQQQQQQQQQ";
+    CommandInitialize(argc, argv, hd);
 
-    sp->NBin = 100;
-    sp->EMin = -10.0;
-    sp->EMax = -0.0;
-    sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
-    sp->EStart = sp->EMax;
-    sp->tStart = 5000; 
+    readParaInput(sp, hd);
 
-    sp->nstep = 4*sp->N_AA*sp->N_CH;
-    sp->T_0 = 1e4;
-    sp->T_MAX = 1e9;
-    sp->T_WRITE = 1e6;
-    sp->T_BC_RESET = 1e5;
-
-    sp->GAMMA_0 = 0.01;
-
-    sp->NBOX = 10;
-    sp->LBOX = 10;
-
-    sp->WT_WIGGLE = 800;
-    sp->WT_PHI = 20;
-    sp->WT_PSI = 20;
-    sp->WT_TRANS = 0;
-    sp->WT_ROSENC = 1;
-    sp->WT_ROSENN = 1;
-
-    sp->DISP_MAX = 0.01;
-    sp->DPHI_MAX = 1.047;
-    sp->DPSI_MAX = 1.047;
-
-    sp->EBIN_TRUNC_UP = false;
-
-    sp->MEASURE = false;
-        sp->HB_CONTMAT = true;
-        sp->WRITE_CONFIG = true;
-            sp->CONFIG_N = 2;
-            sp->CONFIG_ENER = new double[sp->CONFIG_N]; sp->CONFIG_ENER[0] = -1.32; sp->CONFIG_ENER[1] = 0.4;
-            sp->CONFIG_VAR = 0.02;
-
-    /*N_CH = 2;
-    N_AA = 14;
-    L = 100.0;
-    AA_seq = "QQQQQQQQQQQQQQ";
-
-    NBin = 100;
-    EMin = -10.0;
-    EMax = -0.0;
-    BinW = (EMax-EMin)/(double)NBin;
-    EStart = EMax;
-    tStart = 5000;
-
-    nstep = 4*N_AA*N_CH;
-    T_0 = 1e4;
-    T_MAX = 1e9;
-    T_WRITE = 1e6;
-    T_BC_RESET = 1e5;
-
-    GAMMA_0 = 0.01;
-
-    NBOX = 10;
-    LBOX = 10;
-
-    WT_WIGGLE = 800;
-    WT_PHI = 20;
-    WT_PSI = 20;
-    WT_TRANS = 0;
-    WT_ROSENC = 1;
-    WT_ROSENN = 1;
-
-    DISP_MAX = 0.01;
-    DPHI_MAX = 1.047;
-    DPSI_MAX = 1.047;
-
-    EBIN_TRUNC_UP = false;
-
-    MEASURE = false;
-    HB_CONTMAT = true;
-    WRITE_CONFIG = true;
-    CONFIG_N = 2;
-    CONFIG_ENER = new double[CONFIG_N]; CONFIG_ENER[0] = -1.32; CONFIG_ENER[1] = 0.4;
-    CONFIG_VAR = 0.02;*/
+    /*      sp->CONFIG_ENER = new double[sp->CONFIG_N]; sp->CONFIG_ENER[0] = -1.32; sp->CONFIG_ENER[1] = 0.4;
+            sp->CONFIG_VAR = 0.02;*/
 
     neighHead = new int[sp->NBOX*sp->NBOX*sp->NBOX];
     neighList = new int[4*sp->N_AA*sp->N_CH];
@@ -360,7 +237,7 @@ int main()
         }
     }
     // geometry: read from input file or create new
-    if( !readCoord(sp, Chn, "input.xyz") ) {
+    if( !readCoord(sp, hd, Chn) ) {
         std::cout << "creating new Chain" << std::endl;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
@@ -379,7 +256,7 @@ int main()
     }
 
     // position check file output
-    outputPositions(sp, Chn, "AnorLondo.xyz", 0);
+    outputPositions(sp, Chn, hd->dbposi, 0);
 
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
@@ -517,7 +394,7 @@ int main()
         if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {               // check bond length after every move - if this failes: abort run
             std::cerr << endl << "bond length error: t=" << t << std::endl;
             std::cerr << "Energy = " << Eold << std::endl;
-            outputPositions(sp, Chn, "AnorLondo.xyz", 1);
+            outputPositions(sp, Chn, hd->dbposi, 1);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
@@ -534,7 +411,7 @@ int main()
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
             }
-            outputPositions(sp, Chn, "AnorLondo.xyz", 1);
+            outputPositions(sp, Chn, hd->dbposi, 1);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -543,7 +420,7 @@ int main()
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
-    outputPositions(sp, Chn, "AnorLondo.xyz", 1);
+    outputPositions(sp, Chn, hd->dbposi, 1);
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
@@ -917,7 +794,7 @@ int main()
                 }
                 std::cerr << endl;
 
-                outputPositions(sp, Chn, "AnorLondo.xyz", 1);
+                outputPositions(sp, Chn, hd->dbposi, 1);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
@@ -928,7 +805,7 @@ int main()
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
-    outputPositions(sp, Chn, "AnorLondo.xyz", 1);
+    outputPositions(sp, Chn, hd->dbposi, 1);
 
     Timer.PrintProgress(t, sp->T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
@@ -1004,6 +881,29 @@ double RND()
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //          XXXXXXXXXX  INPUT OUTPUT FUNCTIONS  XXXXXXXXXX
 
+// identify file names from command input
+int CommandInitialize(int argc, char *argv[], Header *hd)
+{
+    std::string opt1, opt2;
+    //default values
+    hd->confnm = "config_ini.xyz";
+    hd->paranm = "Sys_param.dat";
+    hd->dbposi = "AnorLondo.xyz";
+
+    //reading arguments
+    for( int i=1; i<argc; i+=2 ) {
+        opt1 = argv[i];
+        opt2 = argv[i+1];
+        if( opt1.compare("-c") == 0 ) {
+            hd->confnm = opt2; }
+        if( opt1.compare("-p") == 0 ) {
+            hd->paranm = opt2; }
+        if( opt1.compare("-d") == 0 ) {
+            hd->dbposi = opt2; }
+    }
+
+    return 0;
+}
 // Head of colsole output
 void ConsoleOutputHead(SysPara *sp)
 {
@@ -1122,8 +1022,131 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
 
     return true;
 }
+// read system arameters from file
+bool readParaInput(SysPara *sp, Header *hd) 
+{
+    ifstream ifstr;
+    stringstream ss_line;
+    std::string s_line, option, value;
+    double d;
+
+    std::cout << "reading parameter input ..." << std::endl;
+
+    int read_NCH = 0;
+    int read_NAA = 0;
+    int read_AAS = 0;
+    int read_L   = 0;
+    int read_NBin= 0;
+    int read_EMin= 0;
+    int read_EMax= 0;
+    int read_ESt = 0;
+    int read_tSt = 0;
+    int read_T0  = 0;
+    int read_TMax= 0;
+    int read_TWrt= 0;
+    int read_TBCR= 0;
+    int read_Gam0= 0;
+    int read_NBox= 0;
+    int read_LBox= 0;
+    int read_WTWi= 0;
+    int read_WTPh= 0;
+    int read_WTPs= 0;
+    int read_WTTr= 0;
+    int read_Disp= 0;
+    int read_DPhi= 0;
+    int read_DPsi= 0;
+    int read_ETru= 0;
+    int read_Meas= 0;
+    int read_HBCM= 0;
+    int read_WCon= 0;
+
+    ifstr.open(hd->paranm);
+    if( ifstr.is_open() ) {
+        while( getline( ifstr, s_line ) ) {
+            ss_line.clear();
+            if( s_line.length() != 0 && s_line.at(0)!='#' && s_line.at(0)!='\n' && s_line.at(0)!='\0' ) {
+                ss_line.str(s_line);
+                getline(ss_line, option, '=');
+                getline(ss_line, value, ';');
+                if( option.compare("N_CH")==0 ) {
+                    sp->N_CH = stoi(value, nullptr);     read_NCH = 1; }
+                else if( option.compare("N_AA")==0 ) {
+                    sp->N_AA = stoi(value, nullptr);     read_NAA = 1; }
+                else if( option.compare("AA_seq")==0 ) {
+                    sp->AA_seq = value;                  read_AAS = 1; }
+                else if( option.compare("L")==0 ) {
+                    sp->L = stod(value, nullptr);        read_L = 1; }
+                else if( option.compare("NBin")==0 ) {
+                    sp->NBin = stoi(value, nullptr);     read_NBin = 1; }
+                else if( option.compare("EMin")==0 ) {
+                    sp->EMin = stod(value, nullptr);     read_EMin = 1; }
+                else if( option.compare("EMax")==0 ) {
+                    sp->EMax = stod(value, nullptr);     read_EMax = 1; }
+                else if( option.compare("EStart")==0 ) {
+                    sp->EStart = stod(value, nullptr);   read_ESt = 1; }
+                else if( option.compare("tStart")==0 ) {
+                    sp->tStart = stoi(value, nullptr);   read_tSt = 1; }
+                else if( option.compare("T_0")==0 ) {
+                    istringstream constr(value); constr >> d;
+                    sp->T_0 = round(d);                  read_T0 = 1; }
+                else if( option.compare("T_MAX")==0 ) {
+                    istringstream constr(value); constr >> d;
+                    sp->T_MAX = round(d);                read_TMax = 1; }
+                else if( option.compare("T_WRITE")==0 ) {
+                    istringstream constr(value); constr >> d;
+                    sp->T_WRITE = round(d);              read_TWrt = 1; }
+                else if( option.compare("T_BC_RESET")==0 ) {
+                    istringstream constr(value); constr >> d;
+                    sp->T_BC_RESET = round(d);           read_TBCR = 1; }
+                else if( option.compare("GAMMA_0")==0 ) {
+                    sp->GAMMA_0 = stod(value, nullptr);  read_Gam0 = 1; }
+                else if( option.compare("NBOX")==0 ) {
+                    sp->NBOX = stoi(value, nullptr);     read_NBox = 1; }
+                else if( option.compare("LBOX")==0 ) {
+                    sp->LBOX = stod(value, nullptr);     read_LBox = 1; }
+                else if( option.compare("WT_WIGGLE")==0 ) {
+                    sp->WT_WIGGLE = stoi(value, nullptr); read_WTWi = 1; }
+                else if( option.compare("WT_PHI")==0 ) {
+                    sp->WT_PHI = stoi(value, nullptr);   read_WTPh = 1; }
+                else if( option.compare("WT_PSI")==0 ) {
+                    sp->WT_PSI = stoi(value, nullptr);   read_WTPs = 1; }
+                else if( option.compare("WT_TRANS")==0 ) {
+                    sp->WT_TRANS = stoi(value, nullptr); read_WTTr = 1; }
+                else if( option.compare("DISP_MAX")==0 ) {
+                    sp->DISP_MAX = stod(value, nullptr); read_Disp = 1; }
+                else if( option.compare("DPHI_MAX")==0 ) {
+                    sp->DPHI_MAX = stod(value, nullptr); read_DPhi = 1; }
+                else if( option.compare("DPSI_MAX")==0 ) {
+                    sp->DPSI_MAX = stod(value, nullptr); read_DPsi = 1; }
+                else if( option.compare("EBIN_TRUNC_UP")==0 ) {
+                    if( value.compare("true")==0 ) { 
+                        sp->EBIN_TRUNC_UP = true; read_ETru = 1; }
+                    else if( value.compare("false")==0 ) { 
+                        sp->EBIN_TRUNC_UP = false; read_ETru = 1; } }
+                else if( option.compare("MEASURE")==0 ) {
+                    if( value.compare("true")==0 ) { sp->MEASURE = true; read_Meas = 1; }
+                    else if( value.compare("false")==0 ) { sp->MEASURE = false; read_Meas = 1; } }
+                else if( option.compare("HB_CONTMAT")==0 ) {
+                    if( value.compare("true")==0 ) { sp->HB_CONTMAT = true; read_HBCM = 1; }
+                    else if( value.compare("false")==0 ) { sp->HB_CONTMAT = false; read_HBCM = 1; } }
+                else if( option.compare("WRITE_CONFIG")==0 ) {
+                    if( value.compare("true")==0 ) { sp->WRITE_CONFIG = true; read_WCon = 1; }
+                    else if( value.compare("false")==0 ) { sp->WRITE_CONFIG = false; read_WCon = 1; } }
+            }
+        }
+        sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
+        sp->nstep = 4*sp->N_AA*sp->N_CH;
+
+        ifstr.close();
+        return true;   
+    }
+    else {
+        std::cout << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
+        return false;
+    }
+}
 // read chain config from file
-bool readCoord(SysPara *sp, Chain Chn[], string inputFile)
+bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
 {
     AmiAc AAinsert;
     ifstream input;
@@ -1133,9 +1156,9 @@ bool readCoord(SysPara *sp, Chain Chn[], string inputFile)
     int i = 0;
     int NaaFile;
 
-    input.open(inputFile);
+    input.open(hd->confnm);
     if( input.is_open() ) {
-        std::cout << "reading coordiates from input file '" << inputFile << "'" << std::endl;
+        std::cout << "reading coordiates from input file '" << hd->confnm << "'" << std::endl;
         for( int j=0; j<sp->N_CH; j++ ) {
             Chn[j].setChnNo(j);
             Chn[j].AmAc.clear();
@@ -1183,10 +1206,11 @@ bool readCoord(SysPara *sp, Chain Chn[], string inputFile)
             }
         }
         input.close();
+        sp->tStart = 0;
         return true;
     }
     else {
-        std::cerr << "unable to open coordinate input file '" << inputFile << "'" << endl;
+        std::cerr << "unable to open coordinate input file '" << hd->confnm << "'" << endl;
         return false;
     }
 }
@@ -1232,7 +1256,7 @@ bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[],
             else break;
         }
         if( s_line[0] != 'b' ) {
-            std::cout << "Aaaaaarg! What a terrible misfortune came upon us in these miserable times of pain and agony?" << std::endl << "also expected 'bin' at start of line. Instead '" << s_line << "' was read" << std::endl;
+            std::cout << "Aaaaaarg! What a terrible misfortune came upon us in these miserable times of pain and agony?" << std::endl << " → expected 'bin' at start of line. Instead '" << s_line << "' was read" << std::endl;
             input.close();
             return false;
         }

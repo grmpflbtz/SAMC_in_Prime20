@@ -109,7 +109,7 @@ bool readParaInput(SysPara *sp, Header *hd);                                    
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                          // reads lngE data from file
-bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode);                  // writes positions to file "name"
+bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode);                  // writes positions to file "name"
 bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
@@ -256,7 +256,7 @@ int main(int argc, char *argv[])
     }
 
     // position check file output
-    outputPositions(sp, Chn, hd->dbposi, 0);
+    outputPositions(sp, hd, Chn, 0);
 
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
@@ -394,7 +394,7 @@ int main(int argc, char *argv[])
         if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {               // check bond length after every move - if this failes: abort run
             std::cerr << endl << "bond length error: t=" << t << std::endl;
             std::cerr << "Energy = " << Eold << std::endl;
-            outputPositions(sp, Chn, hd->dbposi, 1);
+            outputPositions(sp, hd, Chn, 1);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
@@ -411,7 +411,7 @@ int main(int argc, char *argv[])
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
             }
-            outputPositions(sp, Chn, hd->dbposi, 1);
+            outputPositions(sp, hd, Chn, 1);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -420,7 +420,7 @@ int main(int argc, char *argv[])
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
-    outputPositions(sp, Chn, hd->dbposi, 1);
+    outputPositions(sp, hd, Chn, 1);
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
@@ -715,7 +715,7 @@ int main(int argc, char *argv[])
                                 if(backup.is_open()) {
                                     backup << "# Coordinates of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with sequence " << sp->AA_seq << " at E=" << Eold << std::endl;
                                     backup.close();
-                                    outputPositions(sp, Chn, filename, 1);
+                                    outputPositions(sp, hd, Chn, 1);
                                     std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
                                 } else {
                                     std::cout << std::endl << "error opening " << filename << std::endl;
@@ -794,7 +794,7 @@ int main(int argc, char *argv[])
                 }
                 std::cerr << endl;
 
-                outputPositions(sp, Chn, hd->dbposi, 1);
+                outputPositions(sp, hd, Chn, 1);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
@@ -805,7 +805,7 @@ int main(int argc, char *argv[])
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
-    outputPositions(sp, Chn, hd->dbposi, 1);
+    outputPositions(sp, hd, Chn, 1);
 
     Timer.PrintProgress(t, sp->T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
@@ -1327,14 +1327,14 @@ bool extra_lngE(SysPara *sp, Header *hd, double lngE[])
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)
-bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode)
+bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode)
 {
     ofstream Checkpos;
     if(mode == 0) {
-        Checkpos.open(name, ios::out);
+        Checkpos.open(hd->dbposi, ios::out);
     }
     else {
-        Checkpos.open(name, ios::app);
+        Checkpos.open(hd->dbposi, ios::app);
     }
     if( Checkpos.is_open() ) {
         Checkpos << sp->N_CH*sp->N_AA*4 << std::endl;
@@ -1351,7 +1351,7 @@ bool outputPositions(SysPara *sp, Chain Chn[], string name, int mode)
         return true;
     }
     else {
-        std::cerr << "error opening " << name << endl;
+        std::cerr << "error opening " << hd->dbposi << endl;
         return false;
     }
 }

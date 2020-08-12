@@ -69,6 +69,7 @@
 #include <vector>
 #include <algorithm>
 #include <array>
+#include <iterator>
 
 #include "structures.hpp"
 #include "prime20_samc_chain.hpp"
@@ -164,6 +165,10 @@ int main(int argc, char *argv[])
 
     readParaInput(sp, hd);
 
+    sp->CONFIG_E.push_back(-1.32);
+    sp->CONFIG_E.push_back(-5.38);
+    sp->CONFIG_V = 0.02;
+
     /*      sp->CONFIG_ENER = new double[sp->CONFIG_N]; sp->CONFIG_ENER[0] = -1.32; sp->CONFIG_ENER[1] = 0.4;
             sp->CONFIG_VAR = 0.02;*/
 
@@ -185,8 +190,8 @@ int main(int argc, char *argv[])
     H = new long unsigned int[sp->NBin];
     lngE = new double[sp->NBin];
     contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
-    conf_n = new int[sp->CONFIG_N];
-    conf_write_t = new int[sp->CONFIG_N];
+    conf_n = new int[sp->CONFIG_E.size()];
+    conf_write_t = new int[sp->CONFIG_E.size()];
 
 
     fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
@@ -229,7 +234,7 @@ int main(int argc, char *argv[])
                 }
             }
             if(sp->WRITE_CONFIG) {
-                for( int i=0; i<sp->CONFIG_N; i++ ) {
+                for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
                     conf_n[i] = 0;
                     conf_write_t[i] = 0;
                 }
@@ -705,8 +710,8 @@ int main(int argc, char *argv[])
                     }
                 }
                 if(sp->WRITE_CONFIG) {
-                    for( int i=0; i<sp->CONFIG_N; i++ ) {
-                        if( abs(Eold - sp->CONFIG_ENER[i]) <= sp->CONFIG_VAR && conf_n[i]<10 ) {
+                    for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
+                        if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && conf_n[i]<10 ) {
                             if( conf_write_t[i] + 10000 < t ) {
                                 oss.str("");
                                 oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
@@ -1029,7 +1034,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
 bool readParaInput(SysPara *sp, Header *hd) 
 {
     ifstream ifstr;
-    stringstream ss_line;
+    stringstream ss_line, ss_ener;
     std::string s_line, option, value;
     double d;
 
@@ -1062,6 +1067,8 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_Meas= 0;
     int read_HBCM= 0;
     int read_WCon= 0;
+    int read_ConE= 0;
+    int read_ConV= 0;
 
     ifstr.open(hd->paranm);
     if( ifstr.is_open() ) {
@@ -1133,7 +1140,27 @@ bool readParaInput(SysPara *sp, Header *hd)
                     if( value.compare("true")==0 ) { sp->HB_CONTMAT = true; read_HBCM = 1; }
                     else if( value.compare("false")==0 ) { sp->HB_CONTMAT = false; read_HBCM = 1; } }
                 else if( option.compare("WRITE_CONFIG")==0 ) {
-                    if( value.compare("true")==0 ) { sp->WRITE_CONFIG = true; read_WCon = 1; }
+                    if( value.compare("true")==0 ) { 
+                        sp->WRITE_CONFIG = true;    read_WCon = 1;
+                        for( int i=0; i<2; i++ ) {
+                            getline(ifstr, s_line);
+                            ss_line.clear();    ss_line.str(s_line);
+                            getline(ss_line, option, '=');
+                            getline(ss_line, value, ';');
+                            if( option.compare("CONFIG_E")==0 ) {
+                                ss_line.clear(); ss_line.str(value);
+                                std::istream_iterator<std::string> begin(ss_line);
+                                std::istream_iterator<std::string> end;
+                                std::vector<std::string> v_ener(begin, end);
+                                for( int j=0; j<v_ener.size(); j++ ) { sp->CONFIG_E.push_back(stod(v_ener.at(j))); }
+                                read_ConE = 1;
+                            }
+                            else if( option.compare("CONFIG_V")==0 ) {
+                                sp->CONFIG_V = stod(value, nullptr);
+                                read_ConV = 1;
+                            }
+                        }
+                    }
                     else if( value.compare("false")==0 ) { sp->WRITE_CONFIG = false; read_WCon = 1; } }
             }
         }

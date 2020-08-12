@@ -45,9 +45,8 @@ struct SysPara {
     bool MEASURE;
         bool HB_CONTMAT;
         bool WRITE_CONFIG;
-            int CONFIG_N;
-            double *CONFIG_ENER;
-            double CONFIG_VAR;
+            std::vector<double> CONFIG_E;
+            double CONFIG_V;
 };
 
 struct Header {

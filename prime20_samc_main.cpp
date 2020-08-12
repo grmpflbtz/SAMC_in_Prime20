@@ -2336,7 +2336,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
     }
     Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
     for( int i=0; i<3; i++ ) {
-        dVec[i] = RND()*(double)sp->L/2.0;
+        dVec[i] = RND()*PBND_CaCa*2.0;
     }
 
     for( int i=0; i<sp->N_AA; i++ ) {

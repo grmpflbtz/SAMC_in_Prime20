@@ -1197,15 +1197,9 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
                 Chn[j].AmAc.push_back(AAinsert);
             }
         }
-        //getline( input, line );
         input >> NaaFile; input.ignore();
         while( input.good() && !input.eof() ) {
-            input.ignore(3);
-            input >> x >> y >> z;
-
-            //std::cout << "Chn[" << (i/4)/N_AA << "].AmAc[" << (i/4)%N_AA << "].Bd[" << i%4 << "]\t" << x << "\t" << y << "\t" << z << endl;
-
-            //if(i%N_AA == 0) 
+            input >> ID >> x >> y >> z;
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
             input.ignore();
             i++;

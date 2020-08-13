@@ -42,7 +42,7 @@ struct SysPara {
     double DPSI_MAX;
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
-    bool MEASURE;
+    bool FIX_lngE;
         bool HB_CONTMAT;
         bool WRITE_CONFIG;
             std::vector<double> CONFIG_E;
@@ -50,10 +50,11 @@ struct SysPara {
 };
 
 struct Header {
-    std::string confnm;     // configuration input file name
-    std::string paranm;     // parameter input file name
-    std::string dbposi;     // debug position output file name
-    std::string lngEnm;     // ln g(E) input file name
+    std::string confnm;     // input file name configuration
+    std::string paranm;     // input file name parameter
+    std::string lngEnm;     // input file name ln g(E)
+    std::string dbposi;     // output file name debug position
+    std::string hbmatr;     // output file name HB matrices
 };
 
 

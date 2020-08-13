@@ -221,26 +221,28 @@ int main(int argc, char *argv[])
     // check if there is an extra input file for lngE
     if( extra_lngE(sp, hd, lngE ) ) {
         tcont = 0;
-        if(sp->MEASURE) {
-            if(sp->HB_CONTMAT) {
-                std::cout << "production run with fixed ln g(E)" << std::endl;
-                for( int i=0; i<sp->NBin; i++ ) { 
-                    H[i] = 0; 
-                    for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
-                        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                            contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
-                        }
-                    }
-                }
-            }
-            if(sp->WRITE_CONFIG) {
-                for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
-                    conf_n[i] = 0;
-                    conf_write_t[i] = 0;
+        if(sp->FIX_lngE) {
+            std::cout << "production run with fixed ln g(E)" << std::endl;
+        }
+    }
+    if(sp->HB_CONTMAT) {
+        for( int i=0; i<sp->NBin; i++ ) { 
+            H[i] = 0; 
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
                 }
             }
         }
     }
+    if(sp->WRITE_CONFIG) {
+        for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
+            conf_n[i] = 0;
+            conf_write_t[i] = 0;
+        }
+    }
+
+
     // geometry: read from input file or create new
     if( !readCoord(sp, hd, Chn) ) {
         std::cout << "creating new Chain" << std::endl;
@@ -605,7 +607,7 @@ int main(int argc, char *argv[])
             if( accept ) {      // Move accepted → update lngE, H, ...
                 naccept[movetype]++;
                 H[eBin_n]++;
-                if(!sp->MEASURE) lngE[eBin_n] += gamma;
+                if(!sp->FIX_lngE) lngE[eBin_n] += gamma;
                 Eold = Enew;
                 eBin_o = eBin_n;
                 // sync HBDist[] and HBDcpy[]
@@ -634,7 +636,7 @@ int main(int argc, char *argv[])
             }
             else {
                 H[eBin_o]++;
-                if(!sp->MEASURE) lngE[eBin_o] += gamma;
+                if(!sp->FIX_lngE) lngE[eBin_o] += gamma;
                 // Bead and neighbour list reset
                 switch( movetype ) {
                     case 0:     // wiggle
@@ -703,35 +705,35 @@ int main(int argc, char *argv[])
                     HBList[k][1] = HBLcpy[k][1];
                 }
             }
-            if(sp->MEASURE) {
-                if(sp->HB_CONTMAT) {
-                    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-                        if( HBList[i][0] > -1 ) { contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
-                    }
+            
+            if(sp->HB_CONTMAT) {
+                for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+                    if( HBList[i][0] > -1 ) { contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
                 }
-                if(sp->WRITE_CONFIG) {
-                    for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
-                        if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && conf_n[i]<10 ) {
-                            if( conf_write_t[i] + 10000 < t ) {
-                                oss.str("");
-                                oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
-                                filename = oss.str();
-                                backup.open(filename);
-                                if(backup.is_open()) {
-                                    backup << "# Coordinates of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with sequence " << sp->AA_seq << " at E=" << Eold << std::endl;
-                                    backup.close();
-                                    outputPositions(sp, hd, Chn, 1);
-                                    std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
-                                } else {
-                                    std::cout << std::endl << "error opening " << filename << std::endl;
-                                }
-                                conf_n[i]++;
-                                conf_write_t[i]=t;
+            }
+            if(sp->WRITE_CONFIG) {
+                for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
+                    if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && conf_n[i]<10 ) {
+                        if( conf_write_t[i] + 10000 < t ) {
+                            oss.str("");
+                            oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
+                            filename = oss.str();
+                            backup.open(filename);
+                            if(backup.is_open()) {
+                                backup << "# Coordinates of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with sequence " << sp->AA_seq << " at E=" << Eold << std::endl;
+                                backup.close();
+                                outputPositions(sp, hd, Chn, 1);
+                                std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
+                            } else {
+                                std::cout << std::endl << "error opening " << filename << std::endl;
                             }
+                            conf_n[i]++;
+                            conf_write_t[i]=t;
                         }
                     }
                 }
             }
+            
 
             gammasum += gamma;
             tstep++;
@@ -746,34 +748,34 @@ int main(int argc, char *argv[])
 
         }   // end of one MC step
         //gamma update
-        if(!sp->MEASURE){
+        if(!sp->FIX_lngE){
             gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,t));       // from Liang et al.
         }
 
         if( twrite == sp->T_WRITE ) {           // write Backup-File
-            if(!sp->MEASURE) {
+            if(!sp->FIX_lngE) {
                 BackupSAMCrun(sp, Chn, Timer, t, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
             } else {
                 BackupProdRun(sp, Timer, t, H);
-                if(sp->HB_CONTMAT) {
-                    filename = "HBmat.dat";
-                    backup.open(filename, ios::out);
-                    if(backup.is_open() ) {
-                        backup << "# Hydrogen Bind contact matrices after " << t+1 << " steps" << std::endl;
-                        std::setprecision(3); std::fixed;
-                        for( int i=0; i<sp->NBin; i++ ) {
-                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
-                                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                                    backup << contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/H[i] << " ";
-                                }
-                                backup << std::endl;
+            }
+            if(sp->HB_CONTMAT) {
+                filename = hd->hbmatr;
+                backup.open(filename, ios::out);
+                if(backup.is_open() ) {
+                    backup << "# Hydrogen Bind contact matrices after " << t+1 << " steps" << std::endl;
+                    std::setprecision(3); std::fixed;
+                    for( int i=0; i<sp->NBin; i++ ) {
+                        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                                backup << contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/H[i] << " ";
                             }
+                            backup << std::endl;
                         }
-                        backup.close();
                     }
-                    else {
-                        std::cout << endl << "error opening " << filename << endl;
-                    }
+                    backup.close();
+                }
+                else {
+                    std::cout << endl << "error opening " << filename << endl;
                 }
             }
             twrite = 0;
@@ -895,6 +897,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->paranm = "Sys_param.dat";
     hd->dbposi = "AnorLondo.xyz";
     hd->lngEnm = "lngE_input.dat";
+    hd->hbmatr = "HBmat.dat";
 
     //reading arguments
     for( int i=1; i<argc; i+=2 ) {
@@ -908,6 +911,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
             hd->dbposi = opt2; }
         if( opt1.compare("-l") == 0 ) {
             hd->lngEnm = opt2; }
+        if( opt1.compare("-h") == 0 ) {
+            hd->hbmatr = opt2; }
     }
 
     return 0;
@@ -919,10 +924,10 @@ void ConsoleOutputHead(SysPara *sp)
     std::cout << "SAMC PRIME20 simulation" << endl;
     std::cout << "No. of chains " << sp->N_CH << ", chain length " << sp->N_AA << ", sequence " << sp->AA_seq << endl;
     std::cout << "duration T_MAX = " << sp->T_MAX << endl;
-    if(!sp->MEASURE)
+    if(!sp->FIX_lngE)
         std::cout << "SAMC run to apprximate ln[g(E)]." << endl;
     else
-        std::cout << "production run to measure geometric observables." << endl;
+        std::cout << "production run with fixed ln[g(E)]." << endl;
     time(&curtime);
     std::cout << "start time: " << ctime(&curtime) << endl;
     
@@ -1064,7 +1069,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_DPhi= 0;
     int read_DPsi= 0;
     int read_ETru= 0;
-    int read_Meas= 0;
+    int read_FixL= 0;
     int read_HBCM= 0;
     int read_WCon= 0;
     int read_ConE= 0;
@@ -1133,9 +1138,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                         sp->EBIN_TRUNC_UP = true; read_ETru = 1; }
                     else if( value.compare("false")==0 ) { 
                         sp->EBIN_TRUNC_UP = false; read_ETru = 1; } }
-                else if( option.compare("MEASURE")==0 ) {
-                    if( value.compare("true")==0 ) { sp->MEASURE = true; read_Meas = 1; }
-                    else if( value.compare("false")==0 ) { sp->MEASURE = false; read_Meas = 1; } }
+                else if( option.compare("FIX_lngE")==0 ) {
+                    if( value.compare("true")==0 ) { sp->FIX_lngE = true; read_FixL = 1; }
+                    else if( value.compare("false")==0 ) { sp->FIX_lngE = false; read_FixL = 1; } }
                 else if( option.compare("HB_CONTMAT")==0 ) {
                     if( value.compare("true")==0 ) { sp->HB_CONTMAT = true; read_HBCM = 1; }
                     else if( value.compare("false")==0 ) { sp->HB_CONTMAT = false; read_HBCM = 1; } }

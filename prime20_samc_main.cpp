@@ -759,8 +759,7 @@ int main(int argc, char *argv[])
                 BackupProdRun(sp, Timer, t, H);
             }
             if(sp->HB_CONTMAT) {
-                filename = hd->hbmatr;
-                backup.open(filename, ios::out);
+                backup.open(hd->hbmatr, ios::out);
                 if(backup.is_open() ) {
                     backup << "# Hydrogen Bind contact matrices after " << t+1 << " steps" << std::endl;
                     std::setprecision(3); std::fixed;
@@ -775,7 +774,7 @@ int main(int argc, char *argv[])
                     backup.close();
                 }
                 else {
-                    std::cout << endl << "error opening " << filename << endl;
+                    std::cout << endl << "error opening " << hd->hbmatr << endl;
                 }
             }
             twrite = 0;

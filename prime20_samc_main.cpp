@@ -103,28 +103,38 @@ double absVec(double vec[]);                                                    
 tuple<double,double,double> crossPro(double vecA[], double vecB[]);                     // cross product
 tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB);               // distance vector
 double RND();                                                                           // RNG generating double (-1,1)
+
+int program_start_print(ostream &os);                                                   // prints simulation title to os
+int command_print(Header *hd, ostream &os);                                             // prints input/output file names
+int system_parameter_print(SysPara *sp, ostream &os);                                   // prints system parameters to os
+int sim_parameter_print(SysPara *sp, ostream &os);                                      // prints simulation parameters to os
+int cur_time_print(ostream &os);                                                        // prints current time
+
 int CommandInitialize(int argc, char *argv[], Header *hd);                              // identify file names from command input
-void ConsoleOutputHead(SysPara *sp);                                                    // writes simulation head to console
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
-bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                          // reads lngE data from file
-bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode);                  // writes positions to file "name"
+bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                                // reads lngE data from file
+bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode);                   // writes positions to file "name"
 bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
+
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
 double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
 double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
 double E_check(SysPara *sp, Chain Chn[]);                                               // recalculate energy from scratch
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
+
 bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
 bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around N_AA-Ca axis of i1-th amino acid
 bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around Ca-C axis of i1-th amino acid
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
+
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
+
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
@@ -162,15 +172,18 @@ int main(int argc, char *argv[])
     double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
 
     CommandInitialize(argc, argv, hd);
+    program_start_print(std::cout);
+    command_print(hd, std::cout);
+    program_start_print(hd->os_log);
+    command_print(hd, hd->os_log);
 
     readParaInput(sp, hd);
 
-    sp->CONFIG_E.push_back(-1.32);
-    sp->CONFIG_E.push_back(-5.38);
-    sp->CONFIG_V = 0.02;
+    system_parameter_print(sp, std::cout);
+    system_parameter_print(sp, hd->os_log);
+    sim_parameter_print(sp, std::cout);
+    sim_parameter_print(sp, hd->os_log);
 
-    /*      sp->CONFIG_ENER = new double[sp->CONFIG_N]; sp->CONFIG_ENER[0] = -1.32; sp->CONFIG_ENER[1] = 0.4;
-            sp->CONFIG_VAR = 0.02;*/
 
     neighHead = new int[sp->NBOX*sp->NBOX*sp->NBOX];
     neighList = new int[4*sp->N_AA*sp->N_CH];
@@ -196,7 +209,8 @@ int main(int argc, char *argv[])
 
     fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
 
-    ConsoleOutputHead(sp);
+    cur_time_print(std::cout);
+    cur_time_print(hd->os_log);
 
     // initialization of some values
     for( int i=0; i<4; i++ ) {
@@ -819,6 +833,9 @@ int main(int argc, char *argv[])
 
     Timer.endProgram();
 
+
+    hd->os_log.close();
+
     delete[] neighHead;
     delete[] neighList;
     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) { 
@@ -884,6 +901,64 @@ double RND()
     uniform_real_distribution<double> distribution(-1.0,1.0);
     return distribution(rng);
 }
+
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXXX  CONSOLE HEAD PRINT  XXXXXXXXXXXX
+int program_start_print(ostream &os) 
+{
+    os << "###########################################" << std::endl
+       << "              SAMC in Prime20              " << std::endl
+       << "###########################################" << std::endl;
+    return 0;
+}
+int command_print(Header *hd, ostream &os)
+{
+    os << "Initial configuration file: " << hd->confnm << std::endl
+       << "System parameter file:      " << hd->paranm << std::endl
+       << "DOS input file:             " << hd->lngEnm << std::endl
+       << "Output HB matrix file:      " << hd->hbmatr << std::endl
+       << "Output debug position file: " << hd->dbposi << std::endl
+       << "Simulation log file:        " << hd->lognm  << std::endl;
+    return 0;
+}
+int system_parameter_print(SysPara *sp, ostream &os)
+{
+    os << ">> system information <<" << std::endl
+       << "No. of chains:            " << sp->N_CH << std::endl
+       << "Degree of polymerization: " << sp->N_AA << std::endl
+       << "Amino acid sequence:      " << sp->AA_seq << std::endl
+       << "Length of simulation box: " << sp->L << std::endl;
+
+    return 0;
+}
+int sim_parameter_print(SysPara *sp, ostream &os)
+{
+    int obs = 0;
+    os << ">> SAMC parameters <<" << std::endl
+       << "Allowed energy range:     [" << sp->EMin << ";" << sp->EMax << "]" << std::endl
+       << "# of energy bins:         " << sp ->NBin << std::endl
+       << "# of SAMC steps:          " << sp->T_MAX << std::endl;
+        if(sp->FIX_lngE == true ) {
+            os << "Using fixed lng(E)" << std::endl; }
+        else {
+            os << "T_0:                      " << sp->T_0 << std::endl
+               << "gamma_0:                  " << sp->GAMMA_0 << std::endl; }
+    os << "frequency of DOS output   " << sp->T_WRITE << std::endl
+       << ">> observables <<" << std::endl;
+        if( sp->HB_CONTMAT == true ) { obs = 1;
+            os << "Hydrogen bond contact matrices" << std::endl; }
+        if( sp->WRITE_CONFIG == true ) { obs = 1;
+            os << "configurations at energies:";
+            for( int i=0; i<sp->CONFIG_E.size(); i++ ) { os << " " << sp->CONFIG_E.at(i); }
+            os << std::endl << "  with deviation tolerance of dE = " << sp->CONFIG_V << std::endl;
+        }
+        if(obs == 0) {
+            os << "... no observables" << std::endl;
+        }
+
+    return 0;
+}
+
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //          XXXXXXXXXX  INPUT OUTPUT FUNCTIONS  XXXXXXXXXX
 
@@ -897,6 +972,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->dbposi = "AnorLondo.xyz";
     hd->lngEnm = "lngE_input.dat";
     hd->hbmatr = "HBmat.dat";
+    hd->lognm  = "out.log";
 
     //reading arguments
     for( int i=1; i<argc; i+=2 ) {
@@ -914,22 +990,18 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
             hd->hbmatr = opt2; }
     }
 
+    hd->os_log.open(hd->lognm);
+
     return 0;
 }
 // Head of colsole output
-void ConsoleOutputHead(SysPara *sp)
+int cur_time_print(ostream &os)
 {
     time_t curtime;
-    std::cout << "SAMC PRIME20 simulation" << endl;
-    std::cout << "No. of chains " << sp->N_CH << ", chain length " << sp->N_AA << ", sequence " << sp->AA_seq << endl;
-    std::cout << "duration T_MAX = " << sp->T_MAX << endl;
-    if(!sp->FIX_lngE)
-        std::cout << "SAMC run to apprximate ln[g(E)]." << endl;
-    else
-        std::cout << "production run with fixed ln[g(E)]." << endl;
     time(&curtime);
-    std::cout << "start time: " << ctime(&curtime) << endl;
+    os << std::endl << "Start time: " << ctime(&curtime) << endl;
     
+    return 0;
 }
 // creates new chain Chn with N_AA amino acids specified in AA_seq. returns true if successful
 bool newChain(SysPara *sp, Chain Chn[], int chnNum)
@@ -1042,7 +1114,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     std::string s_line, option, value;
     double d;
 
-    std::cout << "reading parameter input ..." << std::endl;
+    std::cout << "reading parameter input ... ";
 
     int read_NCH = 0;
     int read_NAA = 0;
@@ -1172,10 +1244,11 @@ bool readParaInput(SysPara *sp, Header *hd)
         sp->nstep = 4*sp->N_AA*sp->N_CH;
 
         ifstr.close();
+        std::cout << "done" << std::endl;
         return true;   
     }
     else {
-        std::cout << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
+        std::cout << "failed" << std::endl << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
         return false;
     }
 }

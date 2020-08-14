@@ -50,11 +50,14 @@ struct SysPara {
 };
 
 struct Header {
-    std::string confnm;     // input file name configuration
-    std::string paranm;     // input file name parameter
+    std::string confnm;     // input file name initial configuration
+    std::string paranm;     // input file name system parameters
     std::string lngEnm;     // input file name ln g(E)
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
+    std::string lognm;      // output file system log
+
+    std::ofstream os_log;   // ofstream of log file
 };
 
 

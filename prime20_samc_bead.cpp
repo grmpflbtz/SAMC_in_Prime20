@@ -36,6 +36,21 @@ double Bead::getR(int i)
     }
     
 }
+// set bead type
+void Bead::set_btype(int i)
+{
+    switch(i) {
+        case 0: btype = 'N'; break;
+        case 1: btype = 'C'; break;
+        case 2: btype = 'O'; break;
+        case 3: btype = 'R'; break;
+    }
+}
+// get bead type
+char Bead::get_btype()
+{
+    return btype;
+}
 // set Box
 void Bead::setBox(int i)
 {

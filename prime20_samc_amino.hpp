@@ -19,7 +19,6 @@ class AmiAc
     private:
         char AA_alp;        // type of amino acid (alphabetically)
         int AA_num;         // type of amino acid (numerically)
-        int AA_pos;         // position in the polymer chain
 
         double BND_CaR;     // bond length between Ca and R
         double PBND_NR;     // pseudobond length between N and R
@@ -38,6 +37,7 @@ class AmiAc
 
         void Setup(string chain, int i);                   // Sets up amino acid type & beads
         int getAAnum();                                         // access AA_num
+        char get_AAalp();                                       // access AA_alp
         double getDisR(int i);                                  // access distance from side chain to bead i
         double getAng(int i);                                   // access angles
         double getSQZ(int i);                                   // access squeeze parameters

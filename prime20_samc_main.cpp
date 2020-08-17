@@ -116,7 +116,7 @@ bool readParaInput(SysPara *sp, Header *hd);                                    
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                                // reads lngE data from file
-bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode);                   // writes positions to file "name"
+bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
 bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
 
@@ -276,9 +276,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    // position check file output
-    outputPositions(sp, hd, Chn, 0);
-
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
         HBList[i][0] = -1;  HBLcpy[i][0] = -1;
@@ -307,6 +304,10 @@ int main(int argc, char *argv[])
         }
         Eold += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
     }
+
+    // position check file output
+    outputPositions(sp, hd->dbposi, Chn, 0, Eold);
+
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     t = 0;
     while( true ) {
@@ -415,7 +416,7 @@ int main(int argc, char *argv[])
         if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {               // check bond length after every move - if this failes: abort run
             std::cerr << endl << "bond length error: t=" << t << std::endl;
             std::cerr << "Energy = " << Eold << std::endl;
-            outputPositions(sp, hd, Chn, 1);
+            outputPositions(sp, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
@@ -432,7 +433,7 @@ int main(int argc, char *argv[])
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
             }
-            outputPositions(sp, hd, Chn, 1);
+            outputPositions(sp, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -441,7 +442,7 @@ int main(int argc, char *argv[])
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
-    outputPositions(sp, hd, Chn, 1);
+    outputPositions(sp, hd->dbposi, Chn, 1, Eold);
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
@@ -732,14 +733,8 @@ int main(int argc, char *argv[])
                             oss.str("");
                             oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
                             filename = oss.str();
-                            backup.open(filename);
-                            if(backup.is_open()) {
-                                backup << "# Coordinates of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with sequence " << sp->AA_seq << " at E=" << Eold << std::endl;
-                                backup.close();
-                                outputPositions(sp, hd, Chn, 1);
+                            if( outputPositions(sp, filename, Chn, 1, Eold) ) {
                                 std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
-                            } else {
-                                std::cout << std::endl << "error opening " << filename << std::endl;
                             }
                             conf_n[i]++;
                             conf_write_t[i]=t;
@@ -814,7 +809,7 @@ int main(int argc, char *argv[])
                 }
                 std::cerr << endl;
 
-                outputPositions(sp, hd, Chn, 1);
+                outputPositions(sp, hd->dbposi, Chn, 1, Eold);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
@@ -825,7 +820,7 @@ int main(int argc, char *argv[])
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
-    outputPositions(sp, hd, Chn, 1);
+    outputPositions(sp, hd->dbposi, Chn, 1, Eold);
 
     Timer.PrintProgress(t, sp->T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
@@ -1089,6 +1084,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
                 Chn[chnNum].AmAc[i].Bd[j].addBC(k, floor(Chn[chnNum].AmAc[i].Bd[j].getR(k)/sp->L ));
             }
             Chn[chnNum].AmAc[i].Bd[j].setR(Chn[chnNum].AmAc[i].Bd[j].getR(0) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(0)/sp->L), Chn[chnNum].AmAc[i].Bd[j].getR(1) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(1)/sp->L), Chn[chnNum].AmAc[i].Bd[j].getR(2) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(2)/sp->L));
+            Chn[chnNum].AmAc[i].Bd[j].set_btype(j);
                 
         }
     }
@@ -1278,6 +1274,7 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
         while( input.good() && !input.eof() ) {
             input >> ID >> x >> y >> z;
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
+            Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].set_btype(i%4);
             input.ignore();
             i++;
             if(i == NaaFile) { break; }
@@ -1425,23 +1422,29 @@ bool extra_lngE(SysPara *sp, Header *hd, double lngE[])
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)
-bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode)
+bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double ener)
 {
     ofstream Checkpos;
     if(mode == 0) {
-        Checkpos.open(hd->dbposi, ios::out);
+        Checkpos.open(fnm, ios::out);
     }
     else {
-        Checkpos.open(hd->dbposi, ios::app);
+        Checkpos.open(fnm, ios::app);
     }
     if( Checkpos.is_open() ) {
+        Checkpos << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with seq. " << sp->AA_seq << " at E=" << ener << std::endl;
         Checkpos << sp->N_CH*sp->N_AA*4 << std::endl;
 
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-            Checkpos << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2)*sp->L << endl;
+            for( int j=0; j<4; j++ ) {
+                Checkpos << Chn[i/sp->N_AA].getChnNo() << "-" << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].get_AAalp() << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].get_btype() << std::setw(3) << std::setfill('0') << i*4+j << " "
+                         << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(2)*sp->L << endl;
+            }
+            /*Checkpos << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2)*sp->L << endl;
             Checkpos << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2)*sp->L << endl;
             Checkpos << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2)*sp->L << endl;
             Checkpos << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2)*sp->L << endl;
+            */
         }
 
         Checkpos << std::endl;
@@ -1449,7 +1452,7 @@ bool outputPositions(SysPara *sp, Header *hd, Chain Chn[], int mode)
         return true;
     }
     else {
-        std::cerr << "error opening " << hd->dbposi << endl;
+        std::cerr << "error opening " << fnm << endl;
         return false;
     }
 }

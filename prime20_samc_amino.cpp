@@ -41,7 +41,6 @@ const int AA2INT(string chain, int i)
 void AmiAc::Setup(string chain, int i)
 {
     // converting char sequence to int sequence
-	AA_pos = i;
 	AA_alp = chain.at(i);
 	AA_num = AA2INT(chain, i);
 	// side chain (pseudo-)bond lengths (CaR. NR, CR)
@@ -292,6 +291,11 @@ void AmiAc::Setup(string chain, int i)
 int AmiAc::getAAnum()
 { 
 	return AA_num; 
+}
+// access AA_alp
+char AmiAc::get_AAalp()
+{
+	return AA_alp;
 }
 // access distances to side chain
 double AmiAc::getDisR(int i)

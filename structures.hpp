@@ -19,7 +19,7 @@ struct SysPara {
     double EStart;          // energy below which the sim ends the preSAMC moves
     int tStart;             // minimum number of preSAMC moves
 
-    int nstep;              //const int nstep = 8*N_AA*N_CH;
+    int stepit;              //const int nstep = 8*N_AA*N_CH;
     unsigned long int T_0;
     unsigned long int T_MAX;
     unsigned long int T_WRITE;

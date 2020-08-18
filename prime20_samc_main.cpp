@@ -160,16 +160,16 @@ int main(int argc, char *argv[])
     double distabs;                                         // absolute distance
     bool accept;                                            // acceptance value of move in SAMC
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
-    int oldBox, prevNei, nextNei;                           // variables for neighbour list calculations
-    long unsigned int t, tcont, tTimer;                     // time variable keeping track of # steps passed
-    int tstep, tE, twrite, tBCreset;
+    int oldBox;                                             // variables for neighbour list calculations
+    long unsigned int step, tcont;                          // time variable keeping track of # steps passed
+    int it;
     long unsigned int *H;                                   // energy histogram
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     long unsigned int nattempt[4], naccept[4];              // no. attempted moves and no. accepted moves
     double *lngE;                                           // ln g(E): logarithm of density of states g(E) → current approximation
     double *contHB;                                         // contact matrix of hydrogen bonds
     int *conf_n, *conf_write_t;                             // number of configurations written for the selcted energy and last time writing a config for this energy
-    double gamma, gammasum, lngE_old, lngE_new;             // gamma value and sum over gamma(t), ln g(E_old) and ln g(E_new)
+    double gamma, gammasum;                                 // gamma value and sum over gamma(t)
 
     CommandInitialize(argc, argv, hd);
     program_start_print(std::cout);
@@ -309,18 +309,18 @@ int main(int argc, char *argv[])
     outputPositions(sp, hd->dbposi, Chn, 0, Eold);
 
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
-    t = 0;
+    step = 0;
     while( true ) {
         // end pre-SAMC movement after tStart moves and within desired energy window
-        if( (t >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
+        if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
             eBin_o = floor((Eold - sp->EMin)/sp->BinW);
             if( eBin_o == sp->NBin) { eBin_o = sp->NBin-1; }
-            std::cout << "pre-SAMC move " << t << "\r" << std::flush;
+            std::cout << "pre-SAMC move " << step << "\r" << std::flush;
             break;
         }
 
-        if( t%1000 == 0 ) {
-            std::cout << "pre-SAMC move " << t << "\r" << std::flush;
+        if( step%1000 == 0 ) {
+            std::cout << "pre-SAMC move " << step << "\r" << std::flush;
         }
         // HBList copy
         for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -414,7 +414,7 @@ int main(int argc, char *argv[])
         }
 
         if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {               // check bond length after every move - if this failes: abort run
-            std::cerr << endl << "bond length error: t=" << t << std::endl;
+            std::cerr << endl << "bond length error: t=" << step << std::endl;
             std::cerr << "Energy = " << Eold << std::endl;
             outputPositions(sp, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
@@ -438,7 +438,7 @@ int main(int argc, char *argv[])
 
             return 0;
         }
-        t++;
+        step++;
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
@@ -448,14 +448,12 @@ int main(int argc, char *argv[])
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */    
 
-    t = tcont, tE = 1, twrite = 1, tBCreset = 1, tTimer = 0;
-    while( t<sp->T_MAX) {
+    for( step=tcont; step<sp->T_MAX; step++ ) {
         // lets go
-        tstep = 0;          // nstep steps are merged into one SAMC loop
-        while( tstep < sp->nstep ) {
+        for( it=0; it<sp->stepit; it++ ) {
 
-            if( t%((int)1e3) == 0 ) {
-                Timer.PrintProgress(tTimer, sp->T_MAX-tcont);
+            if( step%((int)1e3) == 0 ) {
+                Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
             // select move type
@@ -729,7 +727,7 @@ int main(int argc, char *argv[])
             if(sp->WRITE_CONFIG) {
                 for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
                     if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && conf_n[i]<10 ) {
-                        if( conf_write_t[i] + 10000 < t ) {
+                        if( conf_write_t[i] + 10000 < step ) {
                             oss.str("");
                             oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
                             filename = oss.str();
@@ -737,7 +735,7 @@ int main(int argc, char *argv[])
                                 std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
                             }
                             conf_n[i]++;
-                            conf_write_t[i]=t;
+                            conf_write_t[i]=step;
                         }
                     }
                 }
@@ -745,32 +743,32 @@ int main(int argc, char *argv[])
             
 
             gammasum += gamma;
-            tstep++;
 
             //check histogram anomalies
             for( int i=0; i<sp->NBin; i++ ) {
-                if( H[i] > sp->nstep*sp->T_MAX) {
+                if( H[i] > sp->stepit*sp->T_MAX) {
                     std::cout << std::endl << "What the actual fuck is happening in here?" << std::endl;
                     std::cout << "Eierkucheeeeeeeen" << std::endl;
                 }
             }
 
         }   // end of one MC step
+
         //gamma update
         if(!sp->FIX_lngE){
-            gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,t));       // from Liang et al.
+            gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
         }
 
-        if( twrite == sp->T_WRITE ) {           // write Backup-File
+        if( step%sp->T_WRITE == 0 ) {           // write Backup-File
             if(!sp->FIX_lngE) {
-                BackupSAMCrun(sp, Chn, Timer, t, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
+                BackupSAMCrun(sp, Chn, Timer, step, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
             } else {
-                BackupProdRun(sp, Timer, t, H);
+                BackupProdRun(sp, Timer, step, H);
             }
             if(sp->HB_CONTMAT) {
                 backup.open(hd->hbmatr, ios::out);
                 if(backup.is_open() ) {
-                    backup << "# Hydrogen Bind contact matrices after " << t+1 << " steps" << std::endl;
+                    backup << "# Hydrogen Bind contact matrices after " << step+1 << " steps" << std::endl;
                     std::setprecision(3); std::fixed;
                     for( int i=0; i<sp->NBin; i++ ) {
                         for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
@@ -786,7 +784,6 @@ int main(int argc, char *argv[])
                     std::cout << endl << "error opening " << hd->hbmatr << endl;
                 }
             }
-            twrite = 0;
         }
 
         // check bond length after every move - if this fails: abort run
@@ -799,7 +796,7 @@ int main(int argc, char *argv[])
         }*/
 
         // Energy check
-        if( tE == 10000 ) {
+        if( (step+1)%10000 == 0 ) {
             Ecur = E_check(sp, Chn);
             if( abs(Eold-Ecur) > 0.01 ) {
                 std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
@@ -813,16 +810,14 @@ int main(int argc, char *argv[])
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
-            tE = 0;
         }
 
-        t++; tE++; twrite++, tBCreset++, tTimer++;
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
     outputPositions(sp, hd->dbposi, Chn, 1, Eold);
 
-    Timer.PrintProgress(t, sp->T_MAX);
+    Timer.PrintProgress(step, sp->T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
     std::printf("\npraise the sun ☀\n");
 
@@ -1237,7 +1232,7 @@ bool readParaInput(SysPara *sp, Header *hd)
             }
         }
         sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
-        sp->nstep = 4*sp->N_AA*sp->N_CH;
+        sp->stepit = 4*sp->N_AA*sp->N_CH;
 
         ifstr.close();
         std::cout << "done" << std::endl;
@@ -1440,11 +1435,6 @@ bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double
                 Checkpos << Chn[i/sp->N_AA].getChnNo() << "-" << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].get_AAalp() << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].get_btype() << std::setw(3) << std::setfill('0') << i*4+j << " "
                          << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(2)*sp->L << endl;
             }
-            /*Checkpos << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2)*sp->L << endl;
-            Checkpos << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2)*sp->L << endl;
-            Checkpos << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2)*sp->L << endl;
-            Checkpos << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2)*sp->L << endl;
-            */
         }
 
         Checkpos << std::endl;
@@ -1467,7 +1457,7 @@ bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, 
     if( backup.is_open() ) {
         backup << "# SAMC DoS of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << endl;
         backup << "# sequence " << sp->AA_seq << endl;
-        backup << "# number of MC steps: " << t+1 << ", with " << sp->nstep << " moves per step" << endl;
+        backup << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << endl;
         backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << endl;
         backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << endl;
         backup << "# current runtime: " << Timer.curRunTime() << endl;
@@ -1506,7 +1496,7 @@ bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long
     if( results.is_open() ) {
         results << "# Observables for " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
         results << "# sequence " << sp->AA_seq << std::endl;
-        results << "# number of MC steps: " << t+1 << ", with " << sp->nstep << " moves per step" << std::endl;
+        results << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << std::endl;
         results << "# current runtime: " << Timer.curRunTime() << std::endl;
         results << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
         results << "# measured observables are:" << std::endl;

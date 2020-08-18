@@ -60,5 +60,15 @@ struct Header {
     std::ofstream os_log;   // ofstream of log file
 };
 
+struct Output {
+    long unsigned int *H;           // energy bin visitation histogram
+    double *lngE;                   // lng(E)
+    double *contHB;                 // hydrogen bond contact matrices
+    int *conf_n;                    // # of configs written
+    int *conf_wt;                   // last time writing config for this energy
+    long unsigned int nattempt[4];  // # of attempted moves
+    long unsigned int naccept[4];   // # of accepted moves
+};
+
 
 #endif

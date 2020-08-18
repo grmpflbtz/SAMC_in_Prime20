@@ -139,6 +139,8 @@ int assignBox(SysPara *sp, Bead Bd);                                            
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 
+int memory_deallocation(Output *ot);                                                    // deallocating momory of Output
+
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -147,6 +149,7 @@ int main(int argc, char *argv[])
 {
     SysPara *sp = new SysPara;                              // system parameters
     Header *hd = new Header;                                // file names for input/output
+    Output *ot = new Output;                                // observables for output
 
     Timer Timer;                                            // timer for simulation
     Chain *Chn;                                             // chains in system
@@ -163,12 +166,7 @@ int main(int argc, char *argv[])
     int oldBox;                                             // variables for neighbour list calculations
     long unsigned int step, tcont;                          // time variable keeping track of # steps passed
     int it;
-    long unsigned int *H;                                   // energy histogram
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
-    long unsigned int nattempt[4], naccept[4];              // no. attempted moves and no. accepted moves
-    double *lngE;                                           // ln g(E): logarithm of density of states g(E) → current approximation
-    double *contHB;                                         // contact matrix of hydrogen bonds
-    int *conf_n, *conf_write_t;                             // number of configurations written for the selcted energy and last time writing a config for this energy
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
 
     CommandInitialize(argc, argv, hd);
@@ -200,11 +198,12 @@ int main(int argc, char *argv[])
 
     Chn = new Chain[sp->N_CH];
     BdCpy = new Bead[4*sp->N_AA*sp->N_CH];
-    H = new long unsigned int[sp->NBin];
-    lngE = new double[sp->NBin];
-    contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
-    conf_n = new int[sp->CONFIG_E.size()];
-    conf_write_t = new int[sp->CONFIG_E.size()];
+
+    ot->H = new long unsigned int[sp->NBin];
+    ot->lngE = new double[sp->NBin];
+    ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
+    ot->conf_n = new int[sp->CONFIG_E.size()];
+    ot->conf_wt = new int[sp->CONFIG_E.size()];
 
 
     fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
@@ -214,26 +213,26 @@ int main(int argc, char *argv[])
 
     // initialization of some values
     for( int i=0; i<4; i++ ) {
-        nattempt[i] = 0;
-        naccept[i] = 0;
+        ot->nattempt[i] = 0;
+        ot->naccept[i] = 0;
     }
 
     // lngE, H, gammasum, t: read from input file or start new
-    if( readPrevRunInput(sp, Chn, "input.dat", lngE, H, tcont, gammasum) ) {
+    if( readPrevRunInput(sp, Chn, "input.dat", ot->lngE, ot->H, tcont, gammasum) ) {
         gamma = sp->GAMMA_0*sp->T_0/tcont;
     }
     else {
         // initialize lngE and H and co.
         for( int i=0; i<sp->NBin; i++ ) {
-            lngE[i] = 0;
-            H[i] = 0;
+            ot->lngE[i] = 0;
+            ot->H[i] = 0;
         }
         gamma = sp->GAMMA_0;
         gammasum = 0.0;
         tcont = 0;
     }
     // check if there is an extra input file for lngE
-    if( extra_lngE(sp, hd, lngE ) ) {
+    if( extra_lngE(sp, hd, ot->lngE ) ) {
         tcont = 0;
         if(sp->FIX_lngE) {
             std::cout << "production run with fixed ln g(E)" << std::endl;
@@ -241,18 +240,18 @@ int main(int argc, char *argv[])
     }
     if(sp->HB_CONTMAT) {
         for( int i=0; i<sp->NBin; i++ ) { 
-            H[i] = 0; 
+            ot->H[i] = 0; 
             for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                    contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
+                    ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
                 }
             }
         }
     }
     if(sp->WRITE_CONFIG) {
         for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
-            conf_n[i] = 0;
-            conf_write_t[i] = 0;
+            ot->conf_n[i] = 0;
+            ot->conf_wt[i] = 0;
         }
     }
 
@@ -469,7 +468,7 @@ int main(int argc, char *argv[])
                 HBLcpy[k][1] = HBList[k][1];
             }
             deltaE = 0.0;
-            nattempt[movetype]++;
+            ot->nattempt[movetype]++;
             switch( movetype ) {
                 case 0:
                     i_rand = trunc(realdist01(rng)*(sp->N_CH*sp->N_AA*4));
@@ -601,7 +600,7 @@ int main(int argc, char *argv[])
                         HBList[i][0] = HBLcpy[i][0];
                         HBList[i][1] = HBLcpy[i][1];
                     }
-                    nattempt[movetype]--;
+                    ot->nattempt[movetype]--;
                     /*Ecur = E_check(Chn);
                     if( abs(Ecur-Eold) > 0.01 ) {
                         outputPositions(Chn, "AnorLondo.xyz", 1);
@@ -615,12 +614,12 @@ int main(int argc, char *argv[])
                 if( eBin_n == sp->NBin) { eBin_n = sp->NBin-1; }            // E=0 lands in non-existing bin → belongs to highest bin
                 if( eBin_n == -1 && Enew > sp->EMin-0.00001) { eBin_n = 0; }                  // E=EMin lands in non-existing bin if EBIN_TRUNK_UP = false → belongs to lowest bin
 
-                accept = acceptance(lngE[eBin_o], lngE[eBin_n]);
+                accept = acceptance(ot->lngE[eBin_o], ot->lngE[eBin_n]);
             }
             if( accept ) {      // Move accepted → update lngE, H, ...
-                naccept[movetype]++;
-                H[eBin_n]++;
-                if(!sp->FIX_lngE) lngE[eBin_n] += gamma;
+                ot->naccept[movetype]++;
+                ot->H[eBin_n]++;
+                if(!sp->FIX_lngE) ot->lngE[eBin_n] += gamma;
                 Eold = Enew;
                 eBin_o = eBin_n;
                 // sync HBDist[] and HBDcpy[]
@@ -648,8 +647,8 @@ int main(int argc, char *argv[])
                 // neighbour list is updated in move functions - only if it returns true
             }
             else {
-                H[eBin_o]++;
-                if(!sp->FIX_lngE) lngE[eBin_o] += gamma;
+                ot->H[eBin_o]++;
+                if(!sp->FIX_lngE) ot->lngE[eBin_o] += gamma;
                 // Bead and neighbour list reset
                 switch( movetype ) {
                     case 0:     // wiggle
@@ -721,21 +720,21 @@ int main(int argc, char *argv[])
             
             if(sp->HB_CONTMAT) {
                 for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-                    if( HBList[i][0] > -1 ) { contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
+                    if( HBList[i][0] > -1 ) { ot->contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
                 }
             }
             if(sp->WRITE_CONFIG) {
                 for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
-                    if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && conf_n[i]<10 ) {
-                        if( conf_write_t[i] + 10000 < step ) {
+                    if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && ot->conf_n[i]<10 ) {
+                        if( ot->conf_wt[i] + 10000 < step ) {
                             oss.str("");
-                            oss << "coordinates_E" << i << "_" << conf_n[i] << ".xyz";
+                            oss << "coordinates_E" << i << "_" << ot->conf_n[i] << ".xyz";
                             filename = oss.str();
                             if( outputPositions(sp, filename, Chn, 1, Eold) ) {
                                 std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
                             }
-                            conf_n[i]++;
-                            conf_write_t[i]=step;
+                            ot->conf_n[i]++;
+                            ot->conf_wt[i]=step;
                         }
                     }
                 }
@@ -746,7 +745,7 @@ int main(int argc, char *argv[])
 
             //check histogram anomalies
             for( int i=0; i<sp->NBin; i++ ) {
-                if( H[i] > sp->stepit*sp->T_MAX) {
+                if( ot->H[i] > sp->stepit*sp->T_MAX) {
                     std::cout << std::endl << "What the actual fuck is happening in here?" << std::endl;
                     std::cout << "Eierkucheeeeeeeen" << std::endl;
                 }
@@ -759,11 +758,11 @@ int main(int argc, char *argv[])
             gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
         }
 
-        if( step%sp->T_WRITE == 0 ) {           // write Backup-File
+        if( (step+1)%sp->T_WRITE == 0 ) {           // write Backup-File
             if(!sp->FIX_lngE) {
-                BackupSAMCrun(sp, Chn, Timer, step, gammasum, gamma, naccept, nattempt, lngE, H, Eold);
+                BackupSAMCrun(sp, Chn, Timer, step, gammasum, gamma, ot->naccept, ot->nattempt, ot->lngE, ot->H, Eold);
             } else {
-                BackupProdRun(sp, Timer, step, H);
+                BackupProdRun(sp, Timer, step, ot->H);
             }
             if(sp->HB_CONTMAT) {
                 backup.open(hd->hbmatr, ios::out);
@@ -773,7 +772,7 @@ int main(int argc, char *argv[])
                     for( int i=0; i<sp->NBin; i++ ) {
                         for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
                             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                                backup << contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/H[i] << " ";
+                                backup << ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/ot->H[i] << " ";
                             }
                             backup << std::endl;
                         }
@@ -826,6 +825,8 @@ int main(int argc, char *argv[])
 
     hd->os_log.close();
 
+    memory_deallocation(ot);
+
     delete[] neighHead;
     delete[] neighList;
     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) { 
@@ -841,11 +842,10 @@ int main(int argc, char *argv[])
 
     delete[] Chn;
     delete[] BdCpy;
-    delete[] contHB;
-    delete[] conf_n;
-    delete[] conf_write_t;
 
     delete sp;
+    delete hd;
+    delete ot;
 
     return 0;
 }
@@ -2686,5 +2686,17 @@ int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1)
     }
     else
         //printf("\t\tneighlist wasn't updated\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\n", i1, j1, i1*4+j1, oldBox);
+    return 0;
+}
+
+// deallocate memory
+int memory_deallocation(Output *ot)
+{
+    delete[] ot->H;
+    delete[] ot->lngE;
+    delete[] ot->contHB;
+    delete[] ot->conf_n;
+    delete[] ot->conf_wt;
+
     return 0;
 }

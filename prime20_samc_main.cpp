@@ -169,7 +169,10 @@ int main(int argc, char *argv[])
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
 
-    CommandInitialize(argc, argv, hd);
+    if(CommandInitialize(argc, argv, hd) == -1) {
+        delete sp; delete hd; delete ot;
+        return 0;
+    }
     program_start_print(std::cout);
     command_print(hd, std::cout);
     program_start_print(hd->os_log);
@@ -826,7 +829,7 @@ int main(int argc, char *argv[])
     // calculated positions after SAMC loop
     outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
 
-    Timer.PrintProgress(step, sp->T_MAX);
+    Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
     this_thread::sleep_for(chrono::milliseconds(200));
     std::printf("\npraise the sun ☀\n");
 
@@ -966,6 +969,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
 // identify file names from command input
 int CommandInitialize(int argc, char *argv[], Header *hd)
 {
+    bool display_help = false;
     std::string opt1, opt2;
     //default values
     hd->confnm = "config_ini.xyz";
@@ -977,21 +981,39 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->rrunnm = "rerun.dat";
 
     //reading arguments
-    for( int i=1; i<argc; i+=2 ) {
-        opt1 = argv[i];
-        opt2 = argv[i+1];
-        if( opt1.compare("-c") == 0 ) {
-            hd->confnm = opt2; }
-        if( opt1.compare("-p") == 0 ) {
-            hd->paranm = opt2; }
-        if( opt1.compare("-d") == 0 ) {
-            hd->dbposi = opt2; }
-        if( opt1.compare("-l") == 0 ) {
-            hd->lngEnm = opt2; }
-        if( opt1.compare("-h") == 0 ) {
-            hd->hbmatr = opt2; }
-        if( opt1.compare("-r") == 0 ) {
-            hd->rrunnm = opt2; }
+    if((argc+1)%2 == 0) {
+        for( int i=1; i<argc; i+=2 ) {
+            opt1 = argv[i];
+            opt2 = argv[i+1];
+            if( opt1.compare("-c") == 0 ) {
+                hd->confnm = opt2; }
+            else if( opt1.compare("-p") == 0 ) {
+                hd->paranm = opt2; }
+            else if( opt1.compare("-d") == 0 ) {
+                hd->dbposi = opt2; }
+            else if( opt1.compare("-l") == 0 ) {
+                hd->lngEnm = opt2; }
+            else if( opt1.compare("-h") == 0 ) {
+                hd->hbmatr = opt2; }
+            else if( opt1.compare("-r") == 0 ) {
+                hd->rrunnm = opt2; }
+            else {
+                display_help = true;
+            }
+        }
+    }
+    else {display_help = true;}
+
+    if(display_help == true) {
+        std::cout << "Unable to process argument input." << std::endl
+                  << "Usage: " << argv[0] << " [OPTION1] [FILE1] [OPTION2] [FILE2] ..." << std::endl
+                  << "  -c, input initial configuration" << std::endl
+                  << "  -p, input system parameters" << std::endl
+                  << "  -l, input density of states (lng[E])" << std::endl
+                  << "  -r, input rerun data" << std::endl
+                  << "  -d, output positions for debugging" << std::endl
+                  << "  -h, output hydrogen bond matrices" << std::endl;
+        return -1;
     }
 
     hd->os_log.open(hd->lognm);
@@ -1153,12 +1175,12 @@ bool readParaInput(SysPara *sp, Header *hd)
 
     ifstr.open(hd->paranm);
     if( ifstr.is_open() ) {
-        while( getline( ifstr, s_line ) ) {
+        while( std::getline( ifstr, s_line ) ) {
             ss_line.clear();
             if( s_line.length() != 0 && s_line.at(0)!='#' && s_line.at(0)!='\n' && s_line.at(0)!='\0' ) {
                 ss_line.str(s_line);
-                getline(ss_line, option, '=');
-                getline(ss_line, value, ';');
+                std::getline(ss_line, option, '=');
+                std::getline(ss_line, value, ';');
                 if( option.compare("N_CH")==0 ) {
                     sp->N_CH = stoi(value, nullptr);     read_NCH = 1; }
                 else if( option.compare("N_AA")==0 ) {
@@ -1224,10 +1246,10 @@ bool readParaInput(SysPara *sp, Header *hd)
                     if( value.compare("true")==0 ) { 
                         sp->WRITE_CONFIG = true;    read_WCon = 1;
                         for( int i=0; i<2; i++ ) {
-                            getline(ifstr, s_line);
+                            std::getline(ifstr, s_line);
                             ss_line.clear();    ss_line.str(s_line);
-                            getline(ss_line, option, '=');
-                            getline(ss_line, value, ';');
+                            std::getline(ss_line, option, '=');
+                            std::getline(ss_line, value, ';');
                             if( option.compare("CONFIG_E")==0 ) {
                                 ss_line.clear(); ss_line.str(value);
                                 std::istream_iterator<std::string> begin(ss_line);
@@ -1337,7 +1359,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
     if( input.is_open() ) {
         std::cout << "reading rerun data from input file '" << hd->rrunnm << "'" << std::endl;
         while( true ) {
-            getline( input, s_line);
+            std::getline( input, s_line);
             if( s_line.length() == 0 ) {
                 hd->os_log<< "ERROR: encountered EOF inside input file head" << std::endl;
                 std::cout << "ERROR: encountered EOF inside input file head" << std::endl;
@@ -1346,20 +1368,20 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             }
             if(s_line[0] == '#') {
                 ss_line.str(s_line);
-                getline(ss_line, s_token, delim);
-                getline(ss_line, s_token, delim);
+                std::getline(ss_line, s_token, delim);
+                std::getline(ss_line, s_token, delim);
                 if( s_token.length() == 0 ) continue;
                 if( s_token.compare("number") == 0 ) {
-                    getline(ss_line,s_token, delim);
-                    getline(ss_line,s_token, delim);
-                    getline(ss_line,s_token, delim);
-                    getline(ss_line,s_token, delim);
+                    std::getline(ss_line,s_token, delim);
+                    std::getline(ss_line,s_token, delim);
+                    std::getline(ss_line,s_token, delim);
+                    std::getline(ss_line,s_token, delim);
                     tcont = stoi(s_token, nullptr);
                     std::cout << "  continue after step " << tcont << std::endl;
                 }
                 else if( s_token.compare("gammasum") == 0 ) {
-                    getline(ss_line, s_token, delim);
-                    getline(ss_line, s_token, delim);
+                    std::getline(ss_line, s_token, delim);
+                    std::getline(ss_line, s_token, delim);
                     gammasum = stod(s_token, nullptr);
                     std::cout << "  with gammasum = " << gammasum << std::endl;
                 }
@@ -1408,7 +1430,7 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
     input.open(hd->lngEnm);
     if( input.is_open() ) {
         std::cout << "reading lngE from input file '" << hd->lngEnm << "'" << std::endl;
-        getline(input, s_line);
+        std::getline(input, s_line);
         if(s_line[0] != 'b') {
             std::cout << "unexpected character at start of line in file '" << hd->lngEnm << "': expected 'b', instead '" << s_line[0] << std::endl;
             input.close();

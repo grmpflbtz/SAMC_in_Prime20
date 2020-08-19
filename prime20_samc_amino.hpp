@@ -16,6 +16,8 @@ using namespace std;
 //--------------------------------------------------
 class AmiAc
 {
+    friend class Chain;
+
     private:
         char AA_alp;        // type of amino acid (alphabetically)
         int AA_num;         // type of amino acid (numerically)

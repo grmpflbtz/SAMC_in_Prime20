@@ -114,11 +114,11 @@ int CommandInitialize(int argc, char *argv[], Header *hd);                      
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
-bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
-bool extra_lngE(SysPara *sp, Header *hd, double lngE[]);                                // reads lngE data from file
+bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
+bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
 bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
-bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E);    // backup function in SAMC run
-bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[]);           // backup of observables for production run
+bool BackupSAMCrun(SysPara *sp, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
+bool BackupProdRun(SysPara *sp, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
@@ -218,7 +218,7 @@ int main(int argc, char *argv[])
     }
 
     // lngE, H, gammasum, t: read from input file or start new
-    if( readPrevRunInput(sp, Chn, "input.dat", ot->lngE, ot->H, tcont, gammasum) ) {
+    if( readPrevRunInput(sp, hd, ot, Chn, tcont, gammasum) ) {
         gamma = sp->GAMMA_0*sp->T_0/tcont;
     }
     else {
@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
         tcont = 0;
     }
     // check if there is an extra input file for lngE
-    if( extra_lngE(sp, hd, ot->lngE ) ) {
+    if( read_lngE(sp, hd, ot ) ) {
         tcont = 0;
         if(sp->FIX_lngE) {
             std::cout << "production run with fixed ln g(E)" << std::endl;
@@ -760,9 +760,9 @@ int main(int argc, char *argv[])
 
         if( (step+1)%sp->T_WRITE == 0 ) {           // write Backup-File
             if(!sp->FIX_lngE) {
-                BackupSAMCrun(sp, Chn, Timer, step, gammasum, gamma, ot->naccept, ot->nattempt, ot->lngE, ot->H, Eold);
+                BackupSAMCrun(sp, ot, Chn, Timer, step, gammasum, gamma, Eold);
             } else {
-                BackupProdRun(sp, Timer, step, ot->H);
+                BackupProdRun(sp, ot, Timer, step);
             }
             if(sp->HB_CONTMAT) {
                 backup.open(hd->hbmatr, ios::out);
@@ -903,12 +903,13 @@ int program_start_print(ostream &os)
 }
 int command_print(Header *hd, ostream &os)
 {
-    os << "Initial configuration file: " << hd->confnm << std::endl
-       << "System parameter file:      " << hd->paranm << std::endl
-       << "DOS input file:             " << hd->lngEnm << std::endl
-       << "Output HB matrix file:      " << hd->hbmatr << std::endl
-       << "Output debug position file: " << hd->dbposi << std::endl
-       << "Simulation log file:        " << hd->lognm  << std::endl;
+    os << "Input Initial configuration: " << hd->confnm << std::endl
+       << "Input System parameters:     " << hd->paranm << std::endl
+       << "Input DOS:                   " << hd->lngEnm << std::endl
+       << "Input rerun:                 " << hd->rrunnm << std::endl
+       << "Output HB matrix:            " << hd->hbmatr << std::endl
+       << "Output debug position:       " << hd->dbposi << std::endl
+       << "Output simulation log:       " << hd->lognm  << std::endl;
     return 0;
 }
 int system_parameter_print(SysPara *sp, ostream &os)
@@ -940,7 +941,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
         if( sp->WRITE_CONFIG == true ) { obs = 1;
             os << "configurations at energies:";
             for( int i=0; i<sp->CONFIG_E.size(); i++ ) { os << " " << sp->CONFIG_E.at(i); }
-            os << std::endl << "  with deviation tolerance of dE = " << sp->CONFIG_V << std::endl;
+            os << std::endl << "→ with deviation tolerance of dE = " << sp->CONFIG_V << std::endl;
         }
         if(obs == 0) {
             os << "... no observables" << std::endl;
@@ -963,6 +964,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->lngEnm = "lngE_input.dat";
     hd->hbmatr = "HBmat.dat";
     hd->lognm  = "out.log";
+    hd->rrunnm = "rerun.dat";
 
     //reading arguments
     for( int i=1; i<argc; i+=2 ) {
@@ -978,6 +980,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
             hd->lngEnm = opt2; }
         if( opt1.compare("-h") == 0 ) {
             hd->hbmatr = opt2; }
+        if( opt1.compare("-r") == 0 ) {
+            hd->rrunnm = opt2; }
     }
 
     hd->os_log.open(hd->lognm);
@@ -1308,7 +1312,7 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
     }
 }
 // reads lngE, H, gammasum, and t from input file
-bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[], long unsigned int H[], long unsigned int &tcont, double &gammasum)
+bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum)
 {
     ifstream input;
     stringstream ss_line;
@@ -1317,9 +1321,9 @@ bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[],
     int num;
     double Ebin1, Ebin2;
 
-    input.open(inputFile);
+    input.open(hd->rrunnm);
     if( input.is_open() ) {
-        std::cout << "reading lngE, H, tcont and gammasum from input file '" << inputFile << "'" << std::endl;
+        std::cout << "reading rerun data from input file '" << hd->rrunnm << "'" << std::endl;
         while( true ) {
             getline( input, s_line);
             if( s_line.length() == 0 ) {
@@ -1355,13 +1359,13 @@ bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[],
         }
         for( int i=0; i<sp->NBin; i++ ) {
             if( input.good() ) {
-                input >> num >> Ebin1 >> Ebin2 >> lngE[i] >> H[i];
+                input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> ot->H[i];
                 if( num != i ) {
                     std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
                     input.close();
                     return false;
                 }
-                std::cout << "  " << i << " " << lngE[i] << std::endl;
+                //std::cout << "  " << i << " " << ot->lngE[i] << std::endl;
             }
             else {
                 std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
@@ -1373,11 +1377,11 @@ bool readPrevRunInput(SysPara *sp, Chain Chn[], string inputFile, double lngE[],
         return true;
     }
 
-    std::cout << "unable to open input file '" << inputFile << "'" << std::endl;
+    std::cout << "unable to open input file '" << hd->rrunnm << "'" << std::endl;
     return false;
 }
 // reads lngE data from file
-bool extra_lngE(SysPara *sp, Header *hd, double lngE[])
+bool read_lngE(SysPara *sp, Header *hd, Output *ot)
 {
     ifstream input;
     std::string s_line;
@@ -1396,7 +1400,7 @@ bool extra_lngE(SysPara *sp, Header *hd, double lngE[])
         }
         for( int i=0; i<sp->NBin; i++ ) {
             if( input.good() ) {
-                input >> num >> Ebin1 >> Ebin2 >> lngE[i] >> H;
+                input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> H;
                 if( num != i ) {
                     std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
                     input.close();
@@ -1447,7 +1451,7 @@ bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double
     }
 }
 // writes backup file in SAMC run
-bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, unsigned long naccept[], unsigned long nattempt[], double lngE[], unsigned long H[], double E)
+bool BackupSAMCrun(SysPara *sp, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
 {
     std::ostringstream oss;
     oss << "SAMCbackup_" << t/sp->T_WRITE << ".dat";
@@ -1462,13 +1466,13 @@ bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, 
         backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << endl;
         backup << "# current runtime: " << Timer.curRunTime() << endl;
         backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << endl;
-        backup << "# accepted " << naccept[0] << " of " << nattempt[0] << " (" << 100*(double)naccept[0]/(double)nattempt[0] << "%) local moves" << endl;
-        backup << "# accepted " << naccept[1] << " of " << nattempt[1] << " (" << 100*(double)naccept[1]/(double)nattempt[1] << "%) pivot (Phi) moves" << endl;
-        backup << "# accepted " << naccept[2] << " of " << nattempt[2] << " (" << 100*(double)naccept[2]/(double)nattempt[2] << "%) pivot (Psi) moves" << endl;
-        backup << "# accepted " << naccept[3] << " of " << nattempt[3] << " (" << 100*(double)naccept[3]/(double)nattempt[3] << "%) translation moves" << endl;
+        backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) local moves" << endl;
+        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) pivot (Phi) moves" << endl;
+        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) pivot (Psi) moves" << endl;
+        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) translation moves" << endl;
         backup << "bin  from  to  lng  H" << endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << lngE[i] << " " << H[i] << endl;
+            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << ot->lngE[i] << " " << ot->H[i] << endl;
         }
         backup << "# current configuration ( E=" << E << ")" << endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
@@ -1486,7 +1490,7 @@ bool BackupSAMCrun(SysPara *sp, Chain Chn[], Timer &Timer, unsigned long int t, 
         return false;
     }
 }
-bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long int H[])
+bool BackupProdRun(SysPara *sp, Output *ot, Timer &Timer, unsigned long int t)
 {
     std::ostringstream oss;
     oss << "results_" << t/sp->T_WRITE << ".dat";
@@ -1505,7 +1509,7 @@ bool BackupProdRun(SysPara *sp, Timer &Timer, unsigned long int t, unsigned long
         if(sp->WRITE_CONFIG) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
         results << "Bin from to H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            results << i << " " << sp->EMin+i*sp->BinW << " " <<sp->EMin+(i+1)*sp->BinW << " " << H[i] << std::endl;
+            results << i << " " << sp->EMin+i*sp->BinW << " " <<sp->EMin+(i+1)*sp->BinW << " " << ot->H[i] << std::endl;
         }
         results.close();
         return true;
@@ -1817,10 +1821,7 @@ double E_check(SysPara *sp, Chain Chn[])
 bool acceptance(double lngEold, double lngEnew)
 {
     uniform_real_distribution<double> distribution(0,1);
-
-    // biased moves? logEo -= gammasum*pio → ask Arne and Timur
     double MCrand = distribution(rng);
-    //std::cout << endl << "lngEold=" << lngEold << " lngEnew=" << lngEnew << " exp(lngEnew-lngEold)=" << exp(lngEold-lngEnew) << " MCrand=" << MCrand;
     if( lngEnew <= lngEold ) return true;
     if( exp(lngEold-lngEnew) > MCrand ) return true;
     return false;

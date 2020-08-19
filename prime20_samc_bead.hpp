@@ -13,7 +13,10 @@
 using namespace std;
 //------------------------------------------------------
 class Bead
-{
+{  
+    friend class AmiAc;
+    friend class Chain;
+
     private:
         double x;       // x coordinate
         double y;       // y coordinate

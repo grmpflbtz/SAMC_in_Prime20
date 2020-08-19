@@ -53,6 +53,7 @@ struct Header {
     std::string confnm;     // input file name initial configuration
     std::string paranm;     // input file name system parameters
     std::string lngEnm;     // input file name ln g(E)
+    std::string rrunnm;     // input file name rerun file input
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
     std::string lognm;      // output file system log

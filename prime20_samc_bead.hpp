@@ -21,6 +21,7 @@ class Bead
         double x;       // x coordinate
         double y;       // y coordinate
         double z;       // z coordinate
+        double m;       // mass
         char btype;     // bead type
         int box;        // neighbour list box the particle is in
         int perBC[3];   // tracker of periodic boundary conditions applied to coordinates
@@ -28,6 +29,8 @@ class Bead
     public:
         void setR(double rx, double ry, double rz);     // set position
         double getR(int i);                             // get position (0=x, 1=y, 2=z)
+        void setM(double mass);                         // set mass
+        double getM();                                  // get mass
         void set_btype(int i);                          // set bead type
         char get_btype();                               // get bead type
         void setBox(int i);

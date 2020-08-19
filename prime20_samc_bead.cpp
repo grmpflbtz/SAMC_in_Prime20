@@ -36,6 +36,16 @@ double Bead::getR(int i)
     }
     
 }
+// set mass
+void Bead::setM(double mass)
+{
+    m = mass;
+}
+// get mass
+double Bead::getM()
+{
+    return m;
+}
 // set bead type
 void Bead::set_btype(int i)
 {

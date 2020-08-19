@@ -116,9 +116,9 @@ bool readParaInput(SysPara *sp, Header *hd);                                    
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
-bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
-bool BackupSAMCrun(SysPara *sp, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
-bool BackupProdRun(SysPara *sp, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
+bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
+bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
+bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
     }
 
     // position check file output
-    outputPositions(sp, hd->dbposi, Chn, 0, Eold);
+    outputPositions(sp,hd, hd->dbposi, Chn, 0, Eold);
 
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     step = 0;
@@ -333,7 +333,10 @@ int main(int argc, char *argv[])
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                         { movetype = 1; }   // rotPhi
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )              { movetype = 2; }   // rotPsi
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS ) { movetype = 3; }   // translation
-        else { std::cout << "ERROR\tno movetype was selected" << endl; return 0; }
+        else { 
+            hd->os_log<< "ERROR\tno movetype was selected" << endl; hd->os_log.close();
+            std::cout << "ERROR\tno movetype was selected" << endl; return 0; 
+        }
 
         switch( movetype ) {
             case 0:
@@ -412,15 +415,17 @@ int main(int argc, char *argv[])
             }
         }
 
-        if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {               // check bond length after every move - if this failes: abort run
-            std::cerr << endl << "bond length error: t=" << step << std::endl;
-            std::cerr << "Energy = " << Eold << std::endl;
-            outputPositions(sp, hd->dbposi, Chn, 1, Eold);
+        // check bond length after every move - if this failes: abort run
+        if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
+            hd->os_log<< endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
+            std::cerr << endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
+            outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
         Ecur = E_check(sp, Chn);
         if( abs(Eold-Ecur) > 0.01 ) {
+            hd->os_log<< endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl; hd->os_log.close();
             std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
             std::cerr.precision(3); std::cerr << std::fixed;
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -432,7 +437,7 @@ int main(int argc, char *argv[])
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
             }
-            outputPositions(sp, hd->dbposi, Chn, 1, Eold);
+            outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -441,7 +446,7 @@ int main(int argc, char *argv[])
     }
     std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
-    outputPositions(sp, hd->dbposi, Chn, 1, Eold);
+    outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
@@ -461,7 +466,10 @@ int main(int argc, char *argv[])
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI) )                           { movetype = 1; }   // rotPhi
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI) )                { movetype = 2; }   // rotPsi
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS) )   { movetype = 3; }   // translation
-            else { std::cerr << endl << "ERROR\tno movetype was selected" << endl; return 0; }
+            else { 
+                hd->os_log<< endl << "ERROR\tno movetype was selected" << endl; hd->os_log.close();
+                std::cerr << endl << "ERROR\tno movetype was selected" << endl; return 0; 
+            }
             // chain copy setup
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 HBLcpy[k][0] = HBList[k][0];                                                                // improve efficiency! → select copied part based on movetype
@@ -730,7 +738,7 @@ int main(int argc, char *argv[])
                             oss.str("");
                             oss << "coordinates_E" << i << "_" << ot->conf_n[i] << ".xyz";
                             filename = oss.str();
-                            if( outputPositions(sp, filename, Chn, 1, Eold) ) {
+                            if( outputPositions(sp,hd, filename, Chn, 1, Eold) ) {
                                 std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
                             }
                             ot->conf_n[i]++;
@@ -760,9 +768,9 @@ int main(int argc, char *argv[])
 
         if( (step+1)%sp->T_WRITE == 0 ) {           // write Backup-File
             if(!sp->FIX_lngE) {
-                BackupSAMCrun(sp, ot, Chn, Timer, step, gammasum, gamma, Eold);
+                BackupSAMCrun(sp, hd, ot, Chn, Timer, step, gammasum, gamma, Eold);
             } else {
-                BackupProdRun(sp, ot, Timer, step);
+                BackupProdRun(sp, hd, ot, Timer, step);
             }
             if(sp->HB_CONTMAT) {
                 backup.open(hd->hbmatr, ios::out);
@@ -780,6 +788,7 @@ int main(int argc, char *argv[])
                     backup.close();
                 }
                 else {
+                    hd->os_log<< endl << "error opening " << hd->hbmatr << endl;
                     std::cout << endl << "error opening " << hd->hbmatr << endl;
                 }
             }
@@ -798,14 +807,15 @@ int main(int argc, char *argv[])
         if( (step+1)%10000 == 0 ) {
             Ecur = E_check(sp, Chn);
             if( abs(Eold-Ecur) > 0.01 ) {
-                std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
+                hd->os_log<< endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
+                std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
                 std::cerr << endl << "HBList" << endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl << std::flush;
                 }
                 std::cerr << endl;
 
-                outputPositions(sp, hd->dbposi, Chn, 1, Eold);
+                outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
             }
@@ -814,7 +824,7 @@ int main(int argc, char *argv[])
     }   // end of SAMC main loop
 
     // calculated positions after SAMC loop
-    outputPositions(sp, hd->dbposi, Chn, 1, Eold);
+    outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
 
     Timer.PrintProgress(step, sp->T_MAX);
     this_thread::sleep_for(chrono::milliseconds(200));
@@ -1243,6 +1253,7 @@ bool readParaInput(SysPara *sp, Header *hd)
         return true;   
     }
     else {
+        hd->os_log<< "failed" << std::endl << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
         std::cout << "failed" << std::endl << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
         return false;
     }
@@ -1279,6 +1290,7 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             if(i == NaaFile) { break; }
         }
         if(i != sp->N_CH*sp->N_AA*4) {
+            hd->os_log<< "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
             std::cout << "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
         }
 
@@ -1327,7 +1339,9 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
         while( true ) {
             getline( input, s_line);
             if( s_line.length() == 0 ) {
+                hd->os_log<< "ERROR: encountered EOF inside input file head" << std::endl;
                 std::cout << "ERROR: encountered EOF inside input file head" << std::endl;
+                input.close();
                 return false;
             }
             if(s_line[0] == '#') {
@@ -1361,6 +1375,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             if( input.good() ) {
                 input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> ot->H[i];
                 if( num != i ) {
+                    hd->os_log<< "ERROR: Bad line number " << num << " != " << i << std::endl;
                     std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
                     input.close();
                     return false;
@@ -1368,6 +1383,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
                 //std::cout << "  " << i << " " << ot->lngE[i] << std::endl;
             }
             else {
+                hd->os_log<< "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 input.close();
                 return false;
@@ -1402,12 +1418,14 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
             if( input.good() ) {
                 input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> H;
                 if( num != i ) {
+                    hd->os_log<< "ERROR: Bad line number " << num << " != " << i << std::endl;
                     std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
                     input.close();
                     return false;
                 }
             }
             else {
+                hd->os_log<< "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 input.close();
                 return false;
@@ -1421,7 +1439,7 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)
-bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double ener)
+bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener)
 {
     ofstream Checkpos;
     if(mode == 0) {
@@ -1446,12 +1464,13 @@ bool outputPositions(SysPara *sp, std::string fnm, Chain Chn[], int mode, double
         return true;
     }
     else {
+        hd->os_log<< "error opening " << fnm << endl;
         std::cerr << "error opening " << fnm << endl;
         return false;
     }
 }
 // writes backup file in SAMC run
-bool BackupSAMCrun(SysPara *sp, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
+bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
 {
     std::ostringstream oss;
     oss << "SAMCbackup_" << t/sp->T_WRITE << ".dat";
@@ -1486,11 +1505,12 @@ bool BackupSAMCrun(SysPara *sp, Output *ot, Chain Chn[], Timer &Timer, unsigned 
         return true;
     }
     else {
+        hd->os_log<< endl << "error opening " << name << std::endl;
         std::cout << endl << "error opening " << name << std::endl;
         return false;
     }
 }
-bool BackupProdRun(SysPara *sp, Output *ot, Timer &Timer, unsigned long int t)
+bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t)
 {
     std::ostringstream oss;
     oss << "results_" << t/sp->T_WRITE << ".dat";
@@ -1515,6 +1535,7 @@ bool BackupProdRun(SysPara *sp, Output *ot, Timer &Timer, unsigned long int t)
         return true;
     }
     else {
+        hd->os_log<< endl << "error opening " << name << std::endl;
         std::cout << endl << "error opening " << name << std::endl;
         return false;
     }

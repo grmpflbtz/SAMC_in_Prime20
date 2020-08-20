@@ -43,10 +43,11 @@ struct SysPara {
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;
-        bool HB_CONTMAT;
-        bool WRITE_CONFIG;
-            std::vector<double> CONFIG_E;
-            double CONFIG_V;
+        bool HB_ContMat;
+        bool tGyr;
+        bool wConfig;
+            std::vector<double> ConfigE;
+            double ConfigV;
 };
 
 struct Header {
@@ -65,6 +66,8 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
+    double *rGyr;                   // radius of gyration
+    double **tGyr;                  // tensor of gyration
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[4];  // # of attempted moves

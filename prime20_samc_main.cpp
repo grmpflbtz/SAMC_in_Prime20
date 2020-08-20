@@ -139,7 +139,7 @@ int assignBox(SysPara *sp, Bead Bd);                                            
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 
-int memory_deallocation(Output *ot);                                                    // deallocating momory of Output
+int memory_deallocation(SysPara *sp, Output *ot);                                                    // deallocating momory of Output
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -205,8 +205,11 @@ int main(int argc, char *argv[])
     ot->H = new long unsigned int[sp->NBin];
     ot->lngE = new double[sp->NBin];
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
-    ot->conf_n = new int[sp->CONFIG_E.size()];
-    ot->conf_wt = new int[sp->CONFIG_E.size()];
+    ot->rGyr = new double[sp->NBin];
+    ot->tGyr = new double*[sp->NBin];
+    for( int i=0; i<sp->NBin; i++ ) { ot->tGyr[i] = new double[3]; }
+    ot->conf_n = new int[sp->ConfigE.size()];
+    ot->conf_wt = new int[sp->ConfigE.size()];
 
 
     fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
@@ -241,7 +244,7 @@ int main(int argc, char *argv[])
             std::cout << "production run with fixed ln g(E)" << std::endl;
         }
     }
-    if(sp->HB_CONTMAT) {
+    if(sp->HB_ContMat) {
         for( int i=0; i<sp->NBin; i++ ) { 
             ot->H[i] = 0; 
             for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
@@ -251,8 +254,8 @@ int main(int argc, char *argv[])
             }
         }
     }
-    if(sp->WRITE_CONFIG) {
-        for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
+    if(sp->wConfig) {
+        for( int i=0; i<sp->ConfigE.size(); i++ ) {
             ot->conf_n[i] = 0;
             ot->conf_wt[i] = 0;
         }
@@ -730,14 +733,14 @@ int main(int argc, char *argv[])
                 }
             }
             
-            if(sp->HB_CONTMAT) {
+            if(sp->HB_ContMat) {
                 for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
                     if( HBList[i][0] > -1 ) { ot->contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
                 }
             }
-            if(sp->WRITE_CONFIG) {
-                for( int i=0; i<sp->CONFIG_E.size(); i++ ) {
-                    if( abs(Eold - sp->CONFIG_E.at(i)) <= sp->CONFIG_V && ot->conf_n[i]<10 ) {
+            if(sp->wConfig) {
+                for( int i=0; i<sp->ConfigE.size(); i++ ) {
+                    if( abs(Eold - sp->ConfigE.at(i)) <= sp->ConfigV && ot->conf_n[i]<10 ) {
                         if( ot->conf_wt[i] + 10000 < step ) {
                             oss.str("");
                             oss << "coordinates_E" << i << "_" << ot->conf_n[i] << ".xyz";
@@ -776,7 +779,7 @@ int main(int argc, char *argv[])
             } else {
                 BackupProdRun(sp, hd, ot, Timer, step);
             }
-            if(sp->HB_CONTMAT) {
+            if(sp->HB_ContMat) {
                 backup.open(hd->hbmatr, ios::out);
                 if(backup.is_open() ) {
                     backup << "# Hydrogen Bind contact matrices after " << step+1 << " steps" << std::endl;
@@ -839,7 +842,7 @@ int main(int argc, char *argv[])
 
     hd->os_log.close();
 
-    memory_deallocation(ot);
+    memory_deallocation(sp, ot);
 
     delete[] neighHead;
     delete[] neighList;
@@ -950,12 +953,14 @@ int sim_parameter_print(SysPara *sp, ostream &os)
                << "gamma_0:                  " << sp->GAMMA_0 << std::endl; }
     os << "frequency of DOS output   " << sp->T_WRITE << std::endl
        << ">> observables <<" << std::endl;
-        if( sp->HB_CONTMAT == true ) { obs = 1;
-            os << "Hydrogen bond contact matrices" << std::endl; }
-        if( sp->WRITE_CONFIG == true ) { obs = 1;
-            os << "configurations at energies:";
-            for( int i=0; i<sp->CONFIG_E.size(); i++ ) { os << " " << sp->CONFIG_E.at(i); }
-            os << std::endl << "→ with deviation tolerance of dE = " << sp->CONFIG_V << std::endl;
+        if( sp->HB_ContMat == true ) { obs = 1;
+            os << "- Hydrogen bond contact matrices" << std::endl; }
+        if( sp->tGyr == true ) { obs = 1;
+            os << "- Tensor of gyration" << std::endl; }
+        if( sp->wConfig == true ) { obs = 1;
+            os << "- Configurations at energies:";
+            for( int i=0; i<sp->ConfigE.size(); i++ ) { os << " " << sp->ConfigE.at(i); }
+            os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl;
         }
         if(obs == 0) {
             os << "... no observables" << std::endl;
@@ -1176,6 +1181,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_ETru= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
+    int read_tGyr= 0;
     int read_WCon= 0;
     int read_ConE= 0;
     int read_ConV= 0;
@@ -1246,32 +1252,35 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("FIX_lngE")==0 ) {
                     if( value.compare("true")==0 ) { sp->FIX_lngE = true; read_FixL = 1; }
                     else if( value.compare("false")==0 ) { sp->FIX_lngE = false; read_FixL = 1; } }
-                else if( option.compare("HB_CONTMAT")==0 ) {
-                    if( value.compare("true")==0 ) { sp->HB_CONTMAT = true; read_HBCM = 1; }
-                    else if( value.compare("false")==0 ) { sp->HB_CONTMAT = false; read_HBCM = 1; } }
-                else if( option.compare("WRITE_CONFIG")==0 ) {
+                else if( option.compare("HB_ContMat")==0 ) {
+                    if( value.compare("true")==0 ) { sp->HB_ContMat = true; read_HBCM = 1; }
+                    else if( value.compare("false")==0 ) { sp->HB_ContMat = false; read_HBCM = 1; } }
+                else if( option.compare("tGyr")==0 ) {
+                    if( value.compare("true")==0 ) {sp->tGyr = true; read_tGyr = 1; }
+                    else if( value.compare("false")==0 ) { sp->tGyr = false; read_tGyr = 1; } }
+                else if( option.compare("wConfig")==0 ) {
                     if( value.compare("true")==0 ) { 
-                        sp->WRITE_CONFIG = true;    read_WCon = 1;
+                        sp->wConfig = true;    read_WCon = 1;
                         for( int i=0; i<2; i++ ) {
                             std::getline(ifstr, s_line);
                             ss_line.clear();    ss_line.str(s_line);
                             std::getline(ss_line, option, '=');
                             std::getline(ss_line, value, ';');
-                            if( option.compare("CONFIG_E")==0 ) {
+                            if( option.compare("ConfigE")==0 ) {
                                 ss_line.clear(); ss_line.str(value);
                                 std::istream_iterator<std::string> begin(ss_line);
                                 std::istream_iterator<std::string> end;
                                 std::vector<std::string> v_ener(begin, end);
-                                for( int j=0; j<v_ener.size(); j++ ) { sp->CONFIG_E.push_back(stod(v_ener.at(j))); }
+                                for( int j=0; j<v_ener.size(); j++ ) { sp->ConfigE.push_back(stod(v_ener.at(j))); }
                                 read_ConE = 1;
                             }
-                            else if( option.compare("CONFIG_V")==0 ) {
-                                sp->CONFIG_V = stod(value, nullptr);
+                            else if( option.compare("ConfigV")==0 ) {
+                                sp->ConfigV = stod(value, nullptr);
                                 read_ConV = 1;
                             }
                         }
                     }
-                    else if( value.compare("false")==0 ) { sp->WRITE_CONFIG = false; read_WCon = 1; } }
+                    else if( value.compare("false")==0 ) { sp->wConfig = false; read_WCon = 1; } }
             }
         }
         sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
@@ -1561,8 +1570,8 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned l
         results << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
         results << "# measured observables are:" << std::endl;
         results << "\tvisit histogram H" << std::endl;
-        if(sp->HB_CONTMAT)   { results << "#\tHB contact matrices (file HBmat.dat)" << std::endl; }
-        if(sp->WRITE_CONFIG) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
+        if(sp->HB_ContMat)   { results << "#\tHB contact matrices (file HBmat.dat)" << std::endl; }
+        if(sp->wConfig) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
         results << "Bin from to H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
             results << i << " " << sp->EMin+i*sp->BinW << " " <<sp->EMin+(i+1)*sp->BinW << " " << ot->H[i] << std::endl;
@@ -2748,11 +2757,14 @@ int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1)
 }
 
 // deallocate memory
-int memory_deallocation(Output *ot)
+int memory_deallocation(SysPara *sp, Output *ot)
 {
     delete[] ot->H;
     delete[] ot->lngE;
     delete[] ot->contHB;
+    delete[] ot->rGyr;
+    for(int i=0; i<sp->NBin; i++) { delete[] ot->tGyr[i]; }
+    delete[] ot->tGyr;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

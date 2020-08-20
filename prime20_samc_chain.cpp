@@ -18,9 +18,20 @@ int Chain::getChnNo()
 {
     return chnNo;
 }
+// add m to mass
+void Chain::addM( double m )
+{
+    mass += m;
+}
+// get mass
+double Chain::getM()
+{
+    return mass;
+}
 // constructor
 Chain::Chain(void)
 {
+    mass = 0.0;
 }
 // destructor
 Chain::~Chain(void)

@@ -135,11 +135,13 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);           
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
 
+int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot);                          // calculate tensor of gyration and
+
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 
-int memory_deallocation(SysPara *sp, Output *ot);                                                    // deallocating momory of Output
+int memory_deallocation(SysPara *sp, Output *ot);                                       // deallocating momory of Output
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -168,6 +170,7 @@ int main(int argc, char *argv[])
     int it;
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
+    double m_total;                                         // total mass of the system
 
     if(CommandInitialize(argc, argv, hd) == -1) {
         delete sp; delete hd; delete ot;
@@ -210,7 +213,6 @@ int main(int argc, char *argv[])
     for( int i=0; i<sp->NBin; i++ ) { ot->tGyr[i] = new double[3]; }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
-
 
     fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
 
@@ -2682,6 +2684,15 @@ bool resetBCcouter(SysPara *sp, Chain Chn[])
         }
     }
 
+}
+
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXX  OBSERVABLE FUNCTIONS  XXXXXXXXXXX
+
+// calculate tensor of gyration
+int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot)
+{
+    return 0;
 }
 
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

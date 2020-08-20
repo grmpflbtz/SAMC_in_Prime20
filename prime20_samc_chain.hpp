@@ -17,11 +17,14 @@ class Chain
     private:
         int chnNo;                              // chain number
         std::vector<char> sequence;             // Amino Acid sequence
+        double mass;                            // total chain mass
     public:
         std::vector<AmiAc> AmAc;
 
         void setChnNo( int no );                // set chain number
         int getChnNo();                         // return chain number
+        void addM( double m );                  // add m to mass
+        double getM();                          // get mass
 
         Chain(void);
         ~Chain(void);

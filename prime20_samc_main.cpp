@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
 
     // geometry: read from input file or create new
     if( !readCoord(sp, hd, Chn) ) {
-        std::cout << "creating new Chain" << std::endl;
+        std::cout << "building new Chain ... ... ";
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -276,6 +276,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        std::cout << "done" << std::endl;
     }
 
     // initialize HB list and N-C distance list
@@ -1108,7 +1109,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
 
         Chn[chnNum].AmAc[i].Bd[3].setR(variaMtrx[0], variaMtrx[1], variaMtrx[2]);
     }
-    // move polymer to positive coordinates = apply periodic boundary conditions
+    // PBC, bead type and mass
     for(int i = 0; i < sp->N_AA; i++) {
         for(int j = 0; j < 4; j++) {
             for( int k=0; k<3; k++ ) {
@@ -1116,6 +1117,12 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
             }
             Chn[chnNum].AmAc[i].Bd[j].setR(Chn[chnNum].AmAc[i].Bd[j].getR(0) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(0)/sp->L), Chn[chnNum].AmAc[i].Bd[j].getR(1) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(1)/sp->L), Chn[chnNum].AmAc[i].Bd[j].getR(2) - sp->L*floor(Chn[chnNum].AmAc[i].Bd[j].getR(2)/sp->L));
             Chn[chnNum].AmAc[i].Bd[j].set_btype(j);
+            switch(j) {
+                case 0: Chn[chnNum].AmAc[i].Bd[j].setM(MASS_N); break;
+                case 1: Chn[chnNum].AmAc[i].Bd[j].setM(MASS_C); break;
+                case 2: Chn[chnNum].AmAc[i].Bd[j].setM(MASS_O); break;
+                case 3: Chn[chnNum].AmAc[i].Bd[j].setM( MASS_R(Chn[chnNum].AmAc[i].get_AAalp()) ); break;
+            }
                 
         }
     }
@@ -1307,6 +1314,13 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             input >> ID >> x >> y >> z;
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].set_btype(i%4);
+
+            switch(i%4) {
+                case 0: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_N); break;
+                case 1: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_C); break;
+                case 2: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_O); break;
+                case 3: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM( MASS_R(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].get_AAalp()) ); break;
+            }
             input.ignore();
             i++;
             if(i == NaaFile) { break; }

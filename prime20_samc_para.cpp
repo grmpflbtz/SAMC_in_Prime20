@@ -9,6 +9,31 @@
 
 using namespace std;
 //-------------------------------------------------------------
+// mass of side chain beads
+const double MASS_R(char AAnm)
+{
+	if(AAnm=='G') return 1.0;		//G side chain: H
+	if(AAnm=='A') return 15.0;		//A side chain: CH3
+	if(AAnm=='V') return 43.0;		//V side chain: C3H7
+	if(AAnm=='P') return 42.0;		//P side chain: C3H6
+	if(AAnm=='T') return 45.0;		//T side chain: C2OH5
+	if(AAnm=='S') return 31.0;		//S side chain: COH3
+	if(AAnm=='N') return 58.0;		//N side chain: C2ONH4
+	if(AAnm=='D') return 58.0;		//D side chain: C2O2H2
+	if(AAnm=='R') return 101.0;		//R side chain: C4N3H11
+	if(AAnm=='K') return 73.0;		//K side chain: C4NH11
+	if(AAnm=='E')  return 72.0;		//E side chain: C3O2H4
+	if(AAnm=='Q')  return 72.0;		//Q side chain: C3ONH6
+	if(AAnm=='L')  return 57.0;		//L side chain: C4H9
+	if(AAnm=='I')  return 57.0;		//I side chain: C4H9
+	if(AAnm=='F')  return 91.0;		//F side chain: C7H7
+	if(AAnm=='Y')  return 107.0;	//Y side chain: C7OH7
+	if(AAnm=='W')  return 130.0;	//W side chain: C9NH8
+	if(AAnm=='M')  return 75.0;		//M side chain: C3SH7
+	if(AAnm=='C')  return 47.0;		//C side chain: CSH3
+	if(AAnm=='H')  return 81.0;		//H side chain: C4N2H5
+	std::cout << "invalid char in amino acid sequence: " << AAnm << std::endl; return -1;
+}
 // square well diameter for chn[i] <-> chn[j]
 const double SWDia(AmiAc AmAci, AmiAc AmAcj)
 {

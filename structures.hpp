@@ -66,8 +66,8 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
-    double *rGyr;                   // radius of gyration
-    double **tGyr;                  // tensor of gyration
+    double **rGyr;                  // radius of gyration for each chain and energy bin
+    double ***tGyrEig;              // 3 eigenvalues of tensor of gyration for each chain and energy bin
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[4];  // # of attempted moves

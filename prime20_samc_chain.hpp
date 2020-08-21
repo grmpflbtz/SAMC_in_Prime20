@@ -23,8 +23,8 @@ class Chain
 
         void setChnNo( int no );                // set chain number
         int getChnNo();                         // return chain number
-        void addM( double m );                  // add m to mass
-        double getM();                          // get mass
+        void addM( double m );                  // add m to mass of chain
+        double getM();                          // get mass of chain
 
         Chain(void);
         ~Chain(void);

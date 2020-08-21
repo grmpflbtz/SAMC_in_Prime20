@@ -27,10 +27,10 @@ class Bead
         int perBC[3];   // tracker of periodic boundary conditions applied to coordinates
 
     public:
-        void setR(double rx, double ry, double rz);     // set position
-        double getR(int i);                             // get position (0=x, 1=y, 2=z)
-        void setM(double mass);                         // set mass
-        double getM();                                  // get mass
+        void setR(double rx, double ry, double rz);     // set position (x,y,z)
+        double getR(int i);                             // get position (i-th coordinate)
+        void setM(double mass);                         // set mass of bead
+        double getM();                                  // get mass of bead
         void set_btype(int i);                          // set bead type
         char get_btype();                               // get bead type
         void setBox(int i);

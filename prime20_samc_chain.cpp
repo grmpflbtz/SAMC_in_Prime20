@@ -18,12 +18,12 @@ int Chain::getChnNo()
 {
     return chnNo;
 }
-// add m to mass
+// add m to mass of chain
 void Chain::addM( double m )
 {
     mass += m;
 }
-// get mass
+// get mass of chain
 double Chain::getM()
 {
     return mass;

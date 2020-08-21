@@ -135,7 +135,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);           
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
 
-int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot);                          // calculate tensor of gyration and
+int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[]);             // calculate and sum up tensor of gyration
 
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
@@ -208,9 +208,15 @@ int main(int argc, char *argv[])
     ot->H = new long unsigned int[sp->NBin];
     ot->lngE = new double[sp->NBin];
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
-    ot->rGyr = new double[sp->NBin];
-    ot->tGyr = new double*[sp->NBin];
-    for( int i=0; i<sp->NBin; i++ ) { ot->tGyr[i] = new double[3]; }
+    ot->rGyr = new double*[sp->N_CH];
+    for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
+    ot->tGyrEig = new double **[sp->N_CH];
+    for( int i=0; i<sp->N_CH; i++) {
+        ot->tGyrEig[i] = new double*[sp->NBin]; 
+        for( int j=0; j<sp->NBin; j++ ) {
+            ot->tGyrEig[i][j] = new double[3]{};
+        }
+    }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -266,7 +272,7 @@ int main(int argc, char *argv[])
 
     // geometry: read from input file or create new
     if( !readCoord(sp, hd, Chn) ) {
-        std::cout << "building new Chain ... ... ";
+        std::cout << "building new Chain ... ... " << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -283,6 +289,10 @@ int main(int argc, char *argv[])
         }
         std::cout << "done" << std::endl;
     }
+
+
+    std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;
+
 
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
@@ -756,6 +766,9 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+            if(sp->tGyr) {
+                calc_gyration_tensor(sp, hd, ot, Chn);
+            }
             
 
             gammasum += gamma;
@@ -1044,13 +1057,14 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
     double rad, ZrotAng, XrotAng;                           // radius for y-z calc, rotation angle
     double variaMtrx[3];                                    // variable matrix for side chain
     double ZrotMtrx[3][3], XrotMtrx[3][3];                  // rotation matrix around Z and X axis
-    double tranVec[3], newpos[3], preRot[3], postRotZ[3];    // translation vector, new position after translation, coord. before rotation, coord. after rotation
+    double tranVec[3], newpos[3], preRot[3], postRotZ[3];   // translation vector, new position after translation, coord. before rotation, coord. after rotation
 
     Chn[chnNum].setChnNo(chnNum);
     Chn[chnNum].AmAc.clear();
-    for (int i=0; i<sp->N_AA; i++) {                            // converting char sequence to int sequence
-        AAinsert.Setup(sp->AA_seq, i);
-        Chn[chnNum].AmAc.push_back(AAinsert);
+    for (int i=0; i<sp->N_AA; i++) {
+        AAinsert.Setup(sp->AA_seq, i);                                      // sets up bond lengths, angles, squeeze parameters
+        Chn[chnNum].addM( MASS_N+MASS_C+MASS_O+MASS_R(sp->AA_seq.at(i)) );  // add mass of amino acid to chain mass
+        Chn[chnNum].AmAc.push_back(AAinsert);                               // adds amino acid to chain
     }
 
         // rotation matrix around Z axis
@@ -1317,6 +1331,7 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             Chn[j].AmAc.clear();
             for( int k=0; k<sp->N_AA; k++ ) {
                 AAinsert.Setup(sp->AA_seq, k);
+                Chn[j].addM( MASS_N+MASS_C+MASS_O+MASS_R(sp->AA_seq.at(i)) );   // add mass of amino acid to chain mass
                 Chn[j].AmAc.push_back(AAinsert);
             }
         }
@@ -2690,8 +2705,26 @@ bool resetBCcouter(SysPara *sp, Chain Chn[])
 //          XXXXXXXXXXX  OBSERVABLE FUNCTIONS  XXXXXXXXXXX
 
 // calculate tensor of gyration
-int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot)
+int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
 {
+    double com[sp->N_CH*3] = {0};
+    double Mat11, Mat12, Mat13, Mat22, Mat23, Mat33;
+
+    //center of mass
+    for( int i=0; i<sp->N_CH; i++ ) {
+        for( int j=0; j<sp->N_AA; j++ ) {
+            for( int k=0; k<4; k++ ) {
+                com[i*3+ 0 ] += (Chn[i].AmAc[j].Bd[k].getR( 0 ) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[i*3+ 1 ] += (Chn[i].AmAc[j].Bd[k].getR( 1 ) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[i*3+ 2 ] += (Chn[i].AmAc[j].Bd[k].getR( 2 ) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+            }
+        }
+        com[i*3+0] /= Chn[i].getM();    com[i*3+1] /= Chn[i].getM();    com[i*3+2] /= Chn[i].getM();
+    }
+
+    // gyration tensor
+    Mat11 = Mat12= Mat13 = Mat22 = Mat23 = Mat33 = 0.0;
+
     return 0;
 }
 
@@ -2773,9 +2806,12 @@ int memory_deallocation(SysPara *sp, Output *ot)
     delete[] ot->H;
     delete[] ot->lngE;
     delete[] ot->contHB;
+    for( int i=0; i<sp->N_CH; i++ ) { delete[] ot->rGyr[i]; }
     delete[] ot->rGyr;
-    for(int i=0; i<sp->NBin; i++) { delete[] ot->tGyr[i]; }
-    delete[] ot->tGyr;
+    for( int i=0; i<sp->N_CH; i++ ) { 
+        for( int j=0; j<sp->NBin; j++ ) { delete[] ot->tGyrEig[i][j]; }
+        delete[] ot->tGyrEig[i]; }
+    delete[] ot->tGyrEig;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

@@ -10,14 +10,14 @@
 
 using namespace std;
 //--------------------------------------------------
-// set position
+// set position (x,y,z)
 void Bead::setR(double rx, double ry, double rz)
 {
     x = rx;
     y = ry;
     z = rz;
 }
-// get position
+// get position (i-th coordinate)
 double Bead::getR(int i)
 {
     if (i==0) {
@@ -36,12 +36,12 @@ double Bead::getR(int i)
     }
     
 }
-// set mass
+// set mass of bead
 void Bead::setM(double mass)
 {
     m = mass;
 }
-// get mass
+// get mass of bead
 double Bead::getM()
 {
     return m;

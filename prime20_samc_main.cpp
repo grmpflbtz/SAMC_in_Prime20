@@ -2707,23 +2707,81 @@ bool resetBCcouter(SysPara *sp, Chain Chn[])
 // calculate tensor of gyration
 int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
 {
-    double com[sp->N_CH*3] = {0};
+    double com[3] = {0};
+    double rGxx, rGyy, rGzz;
     double Mat11, Mat12, Mat13, Mat22, Mat23, Mat33;
+    double dx, dy, dz;
+    double A, B, C, D;
+    double p,q, discrim;
 
     //center of mass
     for( int i=0; i<sp->N_CH; i++ ) {
+
+        com[0]=0.0; com[1]=0.0; com[2]=0.0;
         for( int j=0; j<sp->N_AA; j++ ) {
             for( int k=0; k<4; k++ ) {
-                com[i*3+ 0 ] += (Chn[i].AmAc[j].Bd[k].getR( 0 ) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
-                com[i*3+ 1 ] += (Chn[i].AmAc[j].Bd[k].getR( 1 ) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
-                com[i*3+ 2 ] += (Chn[i].AmAc[j].Bd[k].getR( 2 ) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[ 0 ] += (Chn[i].AmAc[j].Bd[k].getR( 0 ) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[ 1 ] += (Chn[i].AmAc[j].Bd[k].getR( 1 ) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[ 2 ] += (Chn[i].AmAc[j].Bd[k].getR( 2 ) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
             }
         }
-        com[i*3+0] /= Chn[i].getM();    com[i*3+1] /= Chn[i].getM();    com[i*3+2] /= Chn[i].getM();
-    }
+        com[0] /= Chn[i].getM();    com[1] /= Chn[i].getM();    com[2] /= Chn[i].getM();
 
-    // gyration tensor
-    Mat11 = Mat12= Mat13 = Mat22 = Mat23 = Mat33 = 0.0;
+
+        // gyration tensor
+        Mat11 = Mat12= Mat13 = Mat22 = Mat23 = Mat33 = 0.0;
+        for( int j=0; j<sp->N_AA; j++ ) {
+            for( int k=0; i<4; k++ ) {
+                dx = Chn[i].AmAc[j].Bd[k].getR(0) - com[0];
+                dy = Chn[i].AmAc[j].Bd[k].getR(1) - com[1];
+                dz = Chn[i].AmAc[j].Bd[k].getR(2) - com[2];
+                Mat11 += dx*dx*Chn[i].AmAc[j].Bd[k].getM();
+                Mat12 += dx*dy*Chn[i].AmAc[j].Bd[k].getM();
+                Mat13 += dx*dz*Chn[i].AmAc[j].Bd[k].getM();
+                Mat22 += dy*dy*Chn[i].AmAc[j].Bd[k].getM();
+                Mat23 += dy*dz*Chn[i].AmAc[j].Bd[k].getM();
+                Mat33 += dz*dz*Chn[i].AmAc[j].Bd[k].getM();
+            }
+        }
+        Mat11/=Chn[i].getM(); Mat12/=Chn[i].getM(); Mat13/=Chn[i].getM();
+        Mat22/=Chn[i].getM(); Mat23/=Chn[i].getM(); 
+        Mat33/=Chn[i].getM();
+
+        // characteristic polynomial
+        A = 1.0;
+        B = -Mat11-Mat22-Mat33;
+        C = Mat11*(Mat22+Mat33) + Mat22*Mat33 - Mat12*Mat12 - Mat23*Mat23 - Mat13*Mat13;
+        D = Mat33*(Mat12*Mat12 - Mat11*Mat22) + Mat23*(2*Mat12*Mat13 + Mat11*Mat23) - Mat13*Mat13*Mat22;
+
+        p = (3.0*C - B*B) / (3.0);
+        q = (2.0*B*B*B - 9.0*B*C + 27.0*D) / (27.0);
+        discrim = (27.0*D*D + 4.0*B*B*B*D - 18.0*B*C*D + 4.0*C*C*C - B*B*C*C) / (108.0);
+
+        // evaluate discriminate
+        if( discrim > 1e-10 ) {
+            std::cout << "inertia tensor: discriminante > 0  -->  complex solution" << std::endl << "--- Aborting calculation ---" << std::endl;
+            return -1;
+        }
+        else if( discrim < 1e-10 && discrim > -1e-10 ) {
+            if( (p != 0.0) && (q != 0.0) ) {
+                rGxx = (B*B*B - 4.0*B*C + 9.0*D) / (3.0*C - B*B);
+                rGyy = rGzz = (B*C - 9.0*D) / (6.0*C - 2.0*B*B);
+            }
+            else if( (p == 0.0) && (q == 0.0) ) {
+                rGxx = rGyy = rGzz = -B / 3.0;
+            }
+            else {
+                std::cout << "inertia tensor: discriminante = 0  -->  unknown case" << std::endl << "--- Aborting calculation ---" << std::endl;
+                return -1;
+            }
+        }
+        else if( discrim < 1e-10 ) {
+            rGxx =  sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) )            ) - B/3.0;
+            rGyy = -sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) ) + M_PI/3.0 ) - B/3.0;
+            rgzz = -sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) ) - M_PI/3.0 ) - B/3.0;
+        }
+    
+    }
 
     return 0;
 }

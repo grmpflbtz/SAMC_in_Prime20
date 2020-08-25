@@ -135,7 +135,8 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);           
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
 
-int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[]);             // calculate and sum up tensor of gyration
+int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate radius of gyration
+int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
 
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
@@ -291,7 +292,7 @@ int main(int argc, char *argv[])
     }
 
 
-    std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;
+    /*std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;*/
 
 
     // initialize HB list and N-C distance list
@@ -766,8 +767,15 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+
+            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
+
             if(sp->tGyr) {
-                calc_gyration_tensor(sp, hd, ot, Chn);
+                calc_gyration_tensor(sp, ot, Chn, eBin_o);
+                calc_gyration_radius(sp, ot, Chn, eBin_o);
+
+                std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyr=" << ot->rGyr[0][eBin_o] << "  from tGyr: rGyr=" << ot->tGyrEig[0][eBin_o][0]+ot->tGyrEig[0][eBin_o][1]+ot->tGyrEig[0][eBin_o][2]
+                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyr=" << ot->rGyr[1][eBin_o] << "  from tGyr: rGyr=" << ot->tGyrEig[1][eBin_o][0]+ot->tGyrEig[1][eBin_o][1]+ot->tGyrEig[1][eBin_o][2] << std::endl;
             }
             
 
@@ -2704,22 +2712,53 @@ bool resetBCcouter(SysPara *sp, Chain Chn[])
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //          XXXXXXXXXXX  OBSERVABLE FUNCTIONS  XXXXXXXXXXX
 
-// calculate tensor of gyration
-int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
+// calculate radius of gyration
+int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin)
 {
-    double com[3] = {0};
-    double rGxx, rGyy, rGzz;
-    double Mat11, Mat12, Mat13, Mat22, Mat23, Mat33;
-    double dx, dy, dz;
-    double A, B, C, D;
-    double p,q, discrim;
+    double com[3], dist[3];
+    double rG2;
 
-    //center of mass
-    for( int i=0; i<sp->N_CH; i++ ) {
-
+    for( int i=0; i<sp->N_CH; i++ ) { // chain
+        // center of mass
         com[0]=0.0; com[1]=0.0; com[2]=0.0;
         for( int j=0; j<sp->N_AA; j++ ) {
             for( int k=0; k<4; k++ ) {
+                com[ 0 ] += (Chn[i].AmAc[j].Bd[k].getR( 0 ) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[ 1 ] += (Chn[i].AmAc[j].Bd[k].getR( 1 ) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+                com[ 2 ] += (Chn[i].AmAc[j].Bd[k].getR( 2 ) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
+            }
+        }
+        com[0] /= Chn[i].getM();    com[1] /= Chn[i].getM();    com[2] /= Chn[i].getM();
+        // radius of gyration squared
+        rG2 = 0.0;
+        for( int j=0; j<sp->N_AA; j++ ) { // amino acid
+            for( int k=0; k<4; k++ ) { // bead
+                for( int l=0; l<3; l++ ) { // coordinate
+                    dist[l] = (Chn[i].AmAc[j].Bd[k].getR(l) + Chn[i].AmAc[j].Bd[k].getBC( l )*sp->L) - com[l];
+                }
+                rG2 += dotPro(dist, dist) * Chn[i].AmAc[j].Bd[k].getM();
+            }
+        }
+        rG2 /= Chn[i].getM();
+        ot->rGyr[i][eBin] = rG2;
+    }
+    return 0;
+}
+// calculate tensor of gyration
+int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
+{
+    double com[3];                                      // center of mass 
+    double rGxx, rGyy, rGzz, rGtemp;                    // principal moments of gyration tensor
+    double Mat11, Mat12, Mat13, Mat22, Mat23, Mat33;    // gyration tensor elements
+    double dx, dy, dz;                                  // distance to center of mass
+    double A, B, C, D;                                  // coefficients of characteristic polynomial
+    double p,q, discrim;                                // factors of reduced form and discriminante
+
+    for( int i=0; i<sp->N_CH; i++ ) { // chain
+        //center of mass
+        com[0]=0.0; com[1]=0.0; com[2]=0.0;
+        for( int j=0; j<sp->N_AA; j++ ) { // amino acid
+            for( int k=0; k<4; k++ ) { // bead
                 com[ 0 ] += (Chn[i].AmAc[j].Bd[k].getR( 0 ) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
                 com[ 1 ] += (Chn[i].AmAc[j].Bd[k].getR( 1 ) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
                 com[ 2 ] += (Chn[i].AmAc[j].Bd[k].getR( 2 ) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) * Chn[i].AmAc[j].Bd[k].getM();
@@ -2730,11 +2769,11 @@ int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
 
         // gyration tensor
         Mat11 = Mat12= Mat13 = Mat22 = Mat23 = Mat33 = 0.0;
-        for( int j=0; j<sp->N_AA; j++ ) {
-            for( int k=0; i<4; k++ ) {
-                dx = Chn[i].AmAc[j].Bd[k].getR(0) - com[0];
-                dy = Chn[i].AmAc[j].Bd[k].getR(1) - com[1];
-                dz = Chn[i].AmAc[j].Bd[k].getR(2) - com[2];
+        for( int j=0; j<sp->N_AA; j++ ) { // amino acid
+            for( int k=0; k<4; k++ ) { // bead
+                dx = (Chn[i].AmAc[j].Bd[k].getR(0) + Chn[i].AmAc[j].Bd[k].getBC( 0 )*sp->L) - com[0];
+                dy = (Chn[i].AmAc[j].Bd[k].getR(1) + Chn[i].AmAc[j].Bd[k].getBC( 1 )*sp->L) - com[1];
+                dz = (Chn[i].AmAc[j].Bd[k].getR(2) + Chn[i].AmAc[j].Bd[k].getBC( 2 )*sp->L) - com[2];
                 Mat11 += dx*dx*Chn[i].AmAc[j].Bd[k].getM();
                 Mat12 += dx*dy*Chn[i].AmAc[j].Bd[k].getM();
                 Mat13 += dx*dz*Chn[i].AmAc[j].Bd[k].getM();
@@ -2751,7 +2790,8 @@ int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
         A = 1.0;
         B = -Mat11-Mat22-Mat33;
         C = Mat11*(Mat22+Mat33) + Mat22*Mat33 - Mat12*Mat12 - Mat23*Mat23 - Mat13*Mat13;
-        D = Mat33*(Mat12*Mat12 - Mat11*Mat22) + Mat23*(2*Mat12*Mat13 + Mat11*Mat23) - Mat13*Mat13*Mat22;
+        //D = Mat33*(Mat12*Mat12 - Mat11*Mat22) + Mat23*(2*Mat12*Mat13 + Mat11*Mat23) - Mat13*Mat13*Mat22;
+        D = -Mat11*Mat22*Mat33 + Mat12*Mat12*Mat33 + 2*Mat12*Mat13*Mat23 + Mat13*Mat13*Mat22 + Mat11*Mat23*Mat23;
 
         p = (3.0*C - B*B) / (3.0);
         q = (2.0*B*B*B - 9.0*B*C + 27.0*D) / (27.0);
@@ -2759,7 +2799,7 @@ int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
 
         // evaluate discriminate
         if( discrim > 1e-10 ) {
-            std::cout << "inertia tensor: discriminante > 0  -->  complex solution" << std::endl << "--- Aborting calculation ---" << std::endl;
+            std::cout << "\rinertia tensor: discriminante > 0  -->  complex solution in Chn[" << i << "]            " << std::endl << "--- Aborting calculation ---" << std::endl;
             return -1;
         }
         else if( discrim < 1e-10 && discrim > -1e-10 ) {
@@ -2771,16 +2811,36 @@ int calc_gyration_tensor(SysPara *sp, Header *hd, Output *ot, Chain Chn[])
                 rGxx = rGyy = rGzz = -B / 3.0;
             }
             else {
-                std::cout << "inertia tensor: discriminante = 0  -->  unknown case" << std::endl << "--- Aborting calculation ---" << std::endl;
+                std::cout << "inertia tensor: discriminante = 0  -->  unknown case: p=" << p << " q=" << q << std::endl << "--- Aborting calculation ---" << std::endl;
                 return -1;
             }
         }
         else if( discrim < 1e-10 ) {
             rGxx =  sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) )            ) - B/3.0;
             rGyy = -sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) ) + M_PI/3.0 ) - B/3.0;
-            rgzz = -sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) ) - M_PI/3.0 ) - B/3.0;
+            rGzz = -sqrt(-4.0*p/3.0) * cos( 1.0/3.0 * acos(-q/2.0 * sqrt(-27.0/(p*p*p)) ) - M_PI/3.0 ) - B/3.0;
         }
-    
+        // sorting the eigenvalues
+        if (rGyy > rGxx) {
+            rGtemp = rGxx;
+            rGxx   = rGyy;
+            rGyy   = rGtemp;
+        }
+        if (rGzz > rGxx) {
+            rGtemp = rGxx;
+            rGxx   = rGzz;
+            rGzz   = rGtemp;
+        }
+        if (rGzz > rGyy) {
+            rGtemp = rGyy;
+            rGyy   = rGzz;
+            rGzz   = rGtemp;
+        }
+        // summation of accumulated eigenvalues
+        ot->tGyrEig[i][eBin][0] += rGxx;
+        ot->tGyrEig[i][eBin][1] += rGyy;
+        ot->tGyrEig[i][eBin][2] += rGzz;
+
     }
 
     return 0;

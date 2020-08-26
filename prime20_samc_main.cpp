@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-mt19937 rng(time(NULL));                // constructor for random number generator
-//mt19937 rng(2);                        // debug
+//mt19937 rng(time(NULL));                // constructor for random number generator
+mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -111,12 +111,15 @@ int sim_parameter_print(SysPara *sp, ostream &os);                              
 int cur_time_print(ostream &os);                                                        // prints current time
 
 int CommandInitialize(int argc, char *argv[], Header *hd);                              // identify file names from command input
+
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
+
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
+bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
@@ -142,7 +145,7 @@ int assignBox(SysPara *sp, Bead Bd);                                            
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 
-int memory_deallocation(SysPara *sp, Output *ot);                                       // deallocating momory of Output
+int output_memory_deallocation(SysPara *sp, Output *ot);                               // deallocating momory of Output
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -211,13 +214,16 @@ int main(int argc, char *argv[])
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
     ot->rGyr = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
-    ot->tGyrEig = new double **[sp->N_CH];
+    ot->rGyrCur = new double[sp->N_CH];
+    ot->tGyrEig = new double**[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++) {
         ot->tGyrEig[i] = new double*[sp->NBin]; 
         for( int j=0; j<sp->NBin; j++ ) {
             ot->tGyrEig[i][j] = new double[3]{};
         }
     }
+    ot->tGyrEigCur = new double*[sp->N_CH];
+    for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -354,8 +360,8 @@ int main(int argc, char *argv[])
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )              { movetype = 2; }   // rotPsi
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS ) { movetype = 3; }   // translation
         else { 
-            hd->os_log<< "ERROR\tno movetype was selected" << endl; hd->os_log.close();
-            std::cout << "ERROR\tno movetype was selected" << endl; return 0; 
+            hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
+            std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
         }
 
         switch( movetype ) {
@@ -437,25 +443,25 @@ int main(int argc, char *argv[])
 
         // check bond length after every move - if this failes: abort run
         if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
-            hd->os_log<< endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
-            std::cerr << endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
+            hd->os_log<< std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
+            std::cerr << std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
             outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
         Ecur = E_check(sp, Chn);
         if( abs(Eold-Ecur) > 0.01 ) {
-            hd->os_log<< endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl; hd->os_log.close();
-            std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << endl;
+            hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << std::endl; hd->os_log.close();
+            std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << std::endl;
             std::cerr.precision(3); std::cerr << std::fixed;
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << "k" << k << "\t";
                 for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
                     std::cerr << NCDist[k][m] << "\t";
-                } std::cerr << endl;
-            } std::cerr << endl;
+                } std::cerr << std::endl;
+            } std::cerr << std::endl;
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << endl;
+                std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
             }
             outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
@@ -476,7 +482,7 @@ int main(int argc, char *argv[])
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
 
-            if( step%((int)1e3) == 0 ) {
+            if( step%((int)1e2) == 0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
@@ -487,8 +493,8 @@ int main(int argc, char *argv[])
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI) )                { movetype = 2; }   // rotPsi
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS) )   { movetype = 3; }   // translation
             else { 
-                hd->os_log<< endl << "ERROR\tno movetype was selected" << endl; hd->os_log.close();
-                std::cerr << endl << "ERROR\tno movetype was selected" << endl; return 0; 
+                hd->os_log<< std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; hd->os_log.close();
+                std::cerr << std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; return 0; 
             }
             // chain copy setup
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -773,9 +779,15 @@ int main(int argc, char *argv[])
             if(sp->tGyr) {
                 calc_gyration_tensor(sp, ot, Chn, eBin_o);
                 calc_gyration_radius(sp, ot, Chn, eBin_o);
-
-                std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyr=" << ot->rGyr[0][eBin_o] << "  from tGyr: rGyr=" << ot->tGyrEig[0][eBin_o][0]+ot->tGyrEig[0][eBin_o][1]+ot->tGyrEig[0][eBin_o][2]
-                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyr=" << ot->rGyr[1][eBin_o] << "  from tGyr: rGyr=" << ot->tGyrEig[1][eBin_o][0]+ot->tGyrEig[1][eBin_o][1]+ot->tGyrEig[1][eBin_o][2] << std::endl;
+                
+                for( int i=0; i<sp->N_CH; i++ ) {
+                    if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-10) {
+                        std::cout << std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
+                        hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
+                    }
+                }
+                std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
+                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;
             }
             
 
@@ -818,9 +830,12 @@ int main(int argc, char *argv[])
                     backup.close();
                 }
                 else {
-                    hd->os_log<< endl << "error opening " << hd->hbmatr << endl;
-                    std::cout << endl << "error opening " << hd->hbmatr << endl;
+                    hd->os_log<< std::endl << "error opening " << hd->hbmatr << std::endl;
+                    std::cout << std::endl << "error opening " << hd->hbmatr << std::endl;
                 }
+            }
+            if(sp->tGyr) {
+                output_tGyr(sp, hd, ot, step+1);
             }
         }
 
@@ -837,8 +852,8 @@ int main(int argc, char *argv[])
         if( (step+1)%10000 == 0 ) {
             Ecur = E_check(sp, Chn);
             if( abs(Eold-Ecur) > 0.01 ) {
-                hd->os_log<< endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
-                std::cerr << endl << "ERROR → energies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
+                hd->os_log<< endl << "--- std:: ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
+                std::cerr << endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
                 std::cerr << endl << "HBList" << endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl << std::flush;
@@ -865,7 +880,7 @@ int main(int argc, char *argv[])
 
     hd->os_log.close();
 
-    memory_deallocation(sp, ot);
+    output_memory_deallocation(sp, ot);
 
     delete[] neighHead;
     delete[] neighList;
@@ -1003,11 +1018,12 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     //default values
     hd->confnm = "config_ini.xyz";
     hd->paranm = "Sys_param.dat";
-    hd->dbposi = "AnorLondo.xyz";
     hd->lngEnm = "lngE_input.dat";
-    hd->hbmatr = "HBmat.dat";
-    hd->lognm  = "out.log";
     hd->rrunnm = "rerun.dat";
+    hd->dbposi = "AnorLondo.xyz";
+    hd->hbmatr = "HBmat.dat";
+    hd->tGyrnm = "tGyr.dat";
+    hd->lognm  = "out.log";
 
     //reading arguments
     if((argc+1)%2 == 0) {
@@ -1018,14 +1034,16 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
                 hd->confnm = opt2; }
             else if( opt1.compare("-p") == 0 ) {
                 hd->paranm = opt2; }
-            else if( opt1.compare("-d") == 0 ) {
-                hd->dbposi = opt2; }
             else if( opt1.compare("-l") == 0 ) {
                 hd->lngEnm = opt2; }
-            else if( opt1.compare("-h") == 0 ) {
-                hd->hbmatr = opt2; }
             else if( opt1.compare("-r") == 0 ) {
                 hd->rrunnm = opt2; }
+            else if( opt1.compare("-d") == 0 ) {
+                hd->dbposi = opt2; }
+            else if( opt1.compare("-h") == 0 ) {
+                hd->hbmatr = opt2; }
+            else if( opt1.compare("-g") == 0 ) {
+                hd->tGyrnm = opt2; }
             else {
                 display_help = true;
             }
@@ -1041,7 +1059,9 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
                   << "  -l, input density of states (lng[E])" << std::endl
                   << "  -r, input rerun data" << std::endl
                   << "  -d, output positions for debugging" << std::endl
-                  << "  -h, output hydrogen bond matrices" << std::endl;
+                  << "  -h, output hydrogen bond matrices" << std::endl
+                  << "  -g, output tensor of gyration" << std::endl
+                  << "If not specified default file names will be used" << std::endl;
         return -1;
     }
 
@@ -1315,8 +1335,8 @@ bool readParaInput(SysPara *sp, Header *hd)
         return true;   
     }
     else {
-        hd->os_log<< "failed" << std::endl << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
-        std::cout << "failed" << std::endl << " -- ERROR --    " << hd->paranm << " not found" << std::endl;
+        hd->os_log<< "failed" << std::endl << " -- ERROR --\t" << hd->paranm << " not found" << std::endl;
+        std::cout << "failed" << std::endl << " -- ERROR --\t" << hd->paranm << " not found" << std::endl;
         return false;
     }
 }
@@ -1360,8 +1380,8 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             if(i == NaaFile) { break; }
         }
         if(i != sp->N_CH*sp->N_AA*4) {
-            hd->os_log<< "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
-            std::cout << "ERROR\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
+            hd->os_log<< "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
+            std::cout << "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
         }
 
         // PBC
@@ -1409,8 +1429,8 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
         while( true ) {
             std::getline( input, s_line);
             if( s_line.length() == 0 ) {
-                hd->os_log<< "ERROR: encountered EOF inside input file head" << std::endl;
-                std::cout << "ERROR: encountered EOF inside input file head" << std::endl;
+                hd->os_log<< "--- ERROR ---\tencountered EOF inside input file head" << std::endl;
+                std::cout << "--- ERROR ---\tencountered EOF inside input file head" << std::endl;
                 input.close();
                 return false;
             }
@@ -1445,16 +1465,16 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             if( input.good() ) {
                 input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> ot->H[i];
                 if( num != i ) {
-                    hd->os_log<< "ERROR: Bad line number " << num << " != " << i << std::endl;
-                    std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
+                    hd->os_log<< "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
+                    std::cout << "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
                     input.close();
                     return false;
                 }
                 //std::cout << "  " << i << " " << ot->lngE[i] << std::endl;
             }
             else {
-                hd->os_log<< "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
-                std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
+                hd->os_log<< "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
+                std::cout << "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 input.close();
                 return false;
             }
@@ -1488,15 +1508,15 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
             if( input.good() ) {
                 input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> H;
                 if( num != i ) {
-                    hd->os_log<< "ERROR: Bad line number " << num << " != " << i << std::endl;
-                    std::cout << "ERROR: Bad line number " << num << " != " << i << std::endl;
+                    hd->os_log<< "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
+                    std::cout << "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
                     input.close();
                     return false;
                 }
             }
             else {
-                hd->os_log<< "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
-                std::cout << "ERROR: encountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
+                hd->os_log<< "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
+                std::cout << "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
                 input.close();
                 return false;
             }
@@ -1534,8 +1554,32 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
         return true;
     }
     else {
-        hd->os_log<< "error opening " << fnm << endl;
-        std::cerr << "error opening " << fnm << endl;
+        hd->os_log<< "--- ERROR ---\tfailed to open " << fnm << endl;
+        std::cerr << "--- ERROR ---\tfailed to open " << fnm << endl;
+        return false;
+    }
+}
+// write tensor of gyration
+bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->tGyrnm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl;
+        std::setprecision(4); std::fixed;
+        for( int i=0; i<sp->N_CH; i++ ) {
+            for( int j=0; j<sp->NBin; j++ ) {
+                for( int k=0; k<3; k++ ) {
+                    ostr << (ot->tGyrEig[i][j][k])/(ot->H[j]) << " ";
+                }   ostr << std::endl;
+            }
+        }
+        ostr.close();
+        return true;
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->tGyrnm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->tGyrnm << std::endl;
         return false;
     }
 }
@@ -1575,8 +1619,8 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         return true;
     }
     else {
-        hd->os_log<< endl << "error opening " << name << std::endl;
-        std::cout << endl << "error opening " << name << std::endl;
+        hd->os_log<< endl << "--- ERROR ---\tfailed to open " << name << std::endl;
+        std::cout << endl << "--- ERROR ---\tfailed to open " << name << std::endl;
         return false;
     }
 }
@@ -1605,8 +1649,8 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned l
         return true;
     }
     else {
-        hd->os_log<< endl << "error opening " << name << std::endl;
-        std::cout << endl << "error opening " << name << std::endl;
+        hd->os_log<< endl << "--- ERROR ---\tfailed to open " << name << std::endl;
+        std::cout << endl << "--- ERROR ---\tfailed to open " << name << std::endl;
         return false;
     }
 }
@@ -1751,7 +1795,7 @@ double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, in
     double dist2;
     double energy = 0;
 
-    if( EOswitch == 1 && j1 != 3 ) { std::cout << "ERROR - EO_SegBead() energy calculation for j1=" << j1 << endl; return -1; }
+    if( EOswitch == 1 && j1 != 3 ) { std::cout << "--- ERROR ---\tEO_SegBead() energy calculation for j1=" << j1 << endl; return -1; }
 
     Box = assignBox(sypa, Chn[h1].AmAc[i1].Bd[j1]);
     centrBox[0] = Box % sypa->NBOX;
@@ -2256,7 +2300,7 @@ bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
         }
     }
     else {
-        printf("!ERROR! \trotPhi(): int high has unacceptable value!\n");
+        printf("--- ERROR ---\trotPhi(): int high has unacceptable value!\n");
     }
     // energy calculation
     // break old HB
@@ -2411,7 +2455,7 @@ bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
         }
     }
     else {
-        printf("!ERROR! \trotPsi(): int high has unacceptable value!\n");
+        printf("--- ERROR ---\trotPsi(): int high has unacceptable value!\n");
     }
     // energy calculation
     // break old HB
@@ -2740,7 +2784,8 @@ int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin)
             }
         }
         rG2 /= Chn[i].getM();
-        ot->rGyr[i][eBin] = rG2;
+        ot->rGyrCur[i] = rG2;
+        ot->rGyr[i][eBin] += rG2;
     }
     return 0;
 }
@@ -2791,7 +2836,7 @@ int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
         B = -Mat11-Mat22-Mat33;
         C = Mat11*(Mat22+Mat33) + Mat22*Mat33 - Mat12*Mat12 - Mat23*Mat23 - Mat13*Mat13;
         //D = Mat33*(Mat12*Mat12 - Mat11*Mat22) + Mat23*(2*Mat12*Mat13 + Mat11*Mat23) - Mat13*Mat13*Mat22;
-        D = -Mat11*Mat22*Mat33 + Mat12*Mat12*Mat33 + 2*Mat12*Mat13*Mat23 + Mat13*Mat13*Mat22 + Mat11*Mat23*Mat23;
+        D = -Mat11*Mat22*Mat33 + Mat12*Mat12*Mat33 - 2*Mat12*Mat13*Mat23 + Mat13*Mat13*Mat22 + Mat11*Mat23*Mat23;
 
         p = (3.0*C - B*B) / (3.0);
         q = (2.0*B*B*B - 9.0*B*C + 27.0*D) / (27.0);
@@ -2836,7 +2881,11 @@ int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
             rGyy   = rGzz;
             rGzz   = rGtemp;
         }
-        // summation of accumulated eigenvalues
+        // current principal moments
+        ot->tGyrEigCur[i][0] = rGxx;
+        ot->tGyrEigCur[i][1] = rGyy;
+        ot->tGyrEigCur[i][2] = rGzz;
+        // summation of principal moments
         ot->tGyrEig[i][eBin][0] += rGxx;
         ot->tGyrEig[i][eBin][1] += rGyy;
         ot->tGyrEig[i][eBin][2] += rGzz;
@@ -2919,17 +2968,21 @@ int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1)
 }
 
 // deallocate memory
-int memory_deallocation(SysPara *sp, Output *ot)
+int output_memory_deallocation(SysPara *sp, Output *ot)
 {
     delete[] ot->H;
     delete[] ot->lngE;
     delete[] ot->contHB;
     for( int i=0; i<sp->N_CH; i++ ) { delete[] ot->rGyr[i]; }
     delete[] ot->rGyr;
+    delete[] ot->rGyrCur;
     for( int i=0; i<sp->N_CH; i++ ) { 
         for( int j=0; j<sp->NBin; j++ ) { delete[] ot->tGyrEig[i][j]; }
         delete[] ot->tGyrEig[i]; }
     delete[] ot->tGyrEig;
+    for( int i=0; i<sp->N_CH; i++ ) {
+        delete[] ot->tGyrEigCur[i]; }
+    delete[] ot->tGyrEigCur;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

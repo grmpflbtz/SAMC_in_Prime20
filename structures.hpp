@@ -57,6 +57,7 @@ struct Header {
     std::string rrunnm;     // input file name rerun file input
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
+    std::string tGyrnm;     // output file name tensor of gyration
     std::string lognm;      // output file system log
 
     std::ofstream os_log;   // ofstream of log file
@@ -66,8 +67,10 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
-    double **rGyr;                  // radius of gyration for each chain and energy bin
-    double ***tGyrEig;              // principal moments of tensor of gyration for each chain and energy bin
+    double **rGyr;                  // sum radius of gyration for each chain and energy bin
+    double *rGyrCur;                // current radius of gyration
+    double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
+    double **tGyrEigCur;            // current principal moments of tensor of gyration
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[4];  // # of attempted moves

@@ -786,8 +786,8 @@ int main(int argc, char *argv[])
                         hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
                     }
                 }
-                std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
-                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;
+                /*std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
+                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
             }
             
 
@@ -1541,7 +1541,7 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
     if( Checkpos.is_open() ) {
         Checkpos << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with seq. " << sp->AA_seq << " at E=" << ener << std::endl;
         Checkpos << sp->N_CH*sp->N_AA*4 << std::endl;
-
+        Checkpos << setprecision(3) << std::fixed;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
                 Checkpos << Chn[i/sp->N_AA].getChnNo() << "-" << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].get_AAalp() << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].get_btype() << std::setw(3) << std::setfill('0') << i*4+j << " "

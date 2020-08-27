@@ -774,8 +774,6 @@ int main(int argc, char *argv[])
                 }
             }
 
-            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-
             if(sp->tGyr) {
                 calc_gyration_tensor(sp, ot, Chn, eBin_o);
                 calc_gyration_radius(sp, ot, Chn, eBin_o);

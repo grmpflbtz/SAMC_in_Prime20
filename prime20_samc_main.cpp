@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-//mt19937 rng(time(NULL));                // constructor for random number generator
-mt19937 rng(42);                        // debug
+mt19937 rng(time(NULL));                // constructor for random number generator
+//mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
     ofstream backup;
     std::ostringstream oss;
     string filename;
-    double Eold, Enew, Ecur, deltaE;                        // energy values
+    double Eold, Enew, Egrd, deltaE;                        // energy values
     double dist[3];                                         // distance vector
     double distabs;                                         // absolute distance
     bool accept;                                            // acceptance value of move in SAMC
@@ -237,7 +237,7 @@ int main(int argc, char *argv[])
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
     }
-
+    Egrd = 0.0;
     // lngE, H, gammasum, t: read from input file or start new
     if( readPrevRunInput(sp, hd, ot, Chn, tcont, gammasum) ) {
         gamma = sp->GAMMA_0*sp->T_0/tcont;
@@ -449,10 +449,9 @@ int main(int argc, char *argv[])
             this_thread::sleep_for(chrono::milliseconds(200));
             return 0;
         }
-        Ecur = E_check(sp, Chn);
-        if( abs(Eold-Ecur) > 0.01 ) {
-            hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << std::endl; hd->os_log.close();
-            std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << std::endl;
+        if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
+            hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl; hd->os_log.close();
+            std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl;
             std::cerr.precision(3); std::cerr << std::fixed;
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << "k" << k << "\t";
@@ -498,7 +497,7 @@ int main(int argc, char *argv[])
             }
             // chain copy setup
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                HBLcpy[k][0] = HBList[k][0];                                                                // improve efficiency! → select copied part based on movetype
+                HBLcpy[k][0] = HBList[k][0];            // improve efficiency! → select copied part based on movetype
                 HBLcpy[k][1] = HBList[k][1];
             }
             deltaE = 0.0;
@@ -513,7 +512,7 @@ int main(int argc, char *argv[])
                     break;
                 case 1:
                     ip = trunc(realdist01(rng)*(sp->N_CH*sp->N_AA));    // amino acid identifier of the rotation origin
-                    jp = trunc(realdist01(rng)*2);              // rotate lower or higher part
+                    jp = trunc(realdist01(rng)*2);                      // rotate lower or higher part
                     switch( jp ) {
                         case 0:
                             for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
@@ -773,7 +772,6 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-
             if(sp->tGyr) {
                 calc_gyration_tensor(sp, ot, Chn, eBin_o);
                 calc_gyration_radius(sp, ot, Chn, eBin_o);
@@ -786,6 +784,10 @@ int main(int argc, char *argv[])
                 }
                 /*std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
                           << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
+            }
+            if( Eold < Egrd ) {
+                Egrd = Eold;
+                outputPositions(sp, hd, hd->grdcnm, Chn, 0, Eold);
             }
             
 
@@ -848,10 +850,9 @@ int main(int argc, char *argv[])
 
         // Energy check
         if( (step+1)%10000 == 0 ) {
-            Ecur = E_check(sp, Chn);
-            if( abs(Eold-Ecur) > 0.01 ) {
-                hd->os_log<< endl << "--- std:: ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
-                std::cerr << endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << Ecur << " at step=" << step << endl;
+            if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
+                hd->os_log<< endl << "--- std:: ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
+                std::cerr << endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
                 std::cerr << endl << "HBList" << endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl << std::flush;
@@ -960,8 +961,10 @@ int command_print(Header *hd, ostream &os)
        << "Input System parameters:     " << hd->paranm << std::endl
        << "Input DOS:                   " << hd->lngEnm << std::endl
        << "Input rerun:                 " << hd->rrunnm << std::endl
-       << "Output HB matrix:            " << hd->hbmatr << std::endl
        << "Output debug position:       " << hd->dbposi << std::endl
+       << "Output HB matrix:            " << hd->hbmatr << std::endl
+       << "Output inertia tensor:       " << hd->tGyrnm << std::endl
+       << "Output ground state config.: " << hd->grdcnm << std::endl
        << "Output simulation log:       " << hd->lognm  << std::endl;
     return 0;
 }
@@ -1021,6 +1024,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->dbposi = "AnorLondo.xyz";
     hd->hbmatr = "HBmat.dat";
     hd->tGyrnm = "tGyr.dat";
+    hd->grdcnm = "grdConfig.xyz";
     hd->lognm  = "out.log";
 
     //reading arguments

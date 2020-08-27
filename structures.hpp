@@ -42,10 +42,10 @@ struct SysPara {
     double DPSI_MAX;
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
-    bool FIX_lngE;
-        bool HB_ContMat;
-        bool tGyr;
-        bool wConfig;
+    bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
+        bool HB_ContMat;    // Hydrogen bond contact matrices
+        bool tGyr;          // tensor of gyration
+        bool wConfig;       // write configurations for energies specified by vector ConfigE
             std::vector<double> ConfigE;
             double ConfigV;
 };
@@ -58,6 +58,7 @@ struct Header {
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
     std::string tGyrnm;     // output file name tensor of gyration
+    std::string grdcnm;     // output file name ground state configuration
     std::string lognm;      // output file system log
 
     std::ofstream os_log;   // ofstream of log file

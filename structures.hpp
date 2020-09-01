@@ -43,11 +43,12 @@ struct SysPara {
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
-        bool HB_ContMat;    // Hydrogen bond contact matrices
-        bool tGyr;          // tensor of gyration
-        bool wConfig;       // write configurations for energies specified by vector ConfigE
-            std::vector<double> ConfigE;
-            double ConfigV;
+    bool HB_ContMat;        // Hydrogen bond contact matrices
+    bool Ree;               // end-to-end distance distribution
+    bool tGyr;              // tensor of gyration
+    bool wConfig;           // write configurations for energies specified by vector ConfigE
+        std::vector<double> ConfigE;
+        double ConfigV;
 };
 
 struct Header {
@@ -57,6 +58,7 @@ struct Header {
     std::string rrunnm;     // input file name rerun file input
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
+    std::string Reenm;      // output file name end-to-end distance distribution
     std::string tGyrnm;     // output file name tensor of gyration
     std::string grdcnm;     // output file name ground state configuration
     std::string lognm;      // output file system log
@@ -68,6 +70,7 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
+    double *Ree;                    // end-to-end distance distribution
     double **rGyr;                  // sum radius of gyration for each chain and energy bin
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin

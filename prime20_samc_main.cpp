@@ -210,6 +210,7 @@ int main(int argc, char *argv[])
     ot->H = new long unsigned int[sp->NBin];
     ot->lngE = new double[sp->NBin];
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
+    ot->Ree2 = new double[sp->N_CH * sp->NBin];
     ot->rGyr = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
     ot->rGyrCur = new double[sp->N_CH];
@@ -265,6 +266,11 @@ int main(int argc, char *argv[])
                     ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
                 }
             }
+        }
+    }
+    if(sp->Ree) {
+        for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
+            ot->Ree2[i] = 0;
         }
     }
     if(sp->wConfig) {
@@ -756,6 +762,12 @@ int main(int argc, char *argv[])
                     if( HBList[i][0] > -1 ) { ot->contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
                 }
             }
+            if(sp->Ree) {
+                for( int i=0; i<sp->N_CH; i++ ) {
+                    std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i].AmAc[0].Bd[0], Chn[i].AmAc[sp->N_AA-1].Bd[3]);
+                    ot->Ree2[i * eBin_o] += dotPro(dist, dist);
+                }
+            }
             if(sp->wConfig) {
                 for( int i=0; i<sp->ConfigE.size(); i++ ) {
                     if( abs(Eold - sp->ConfigE.at(i)) <= sp->ConfigV && ot->conf_n[i]<10 ) {
@@ -830,6 +842,21 @@ int main(int argc, char *argv[])
                 else {
                     hd->os_log<< std::endl << "error opening " << hd->hbmatr << std::endl;
                     std::cout << std::endl << "error opening " << hd->hbmatr << std::endl;
+                }
+            }
+            if(sp->Ree) {
+                backup.open(hd->reenm, ios::out);
+                if( backup.is_open() ) {
+                    backup << "# Squared end-to-end distance distribution after " << step+1 << " steps" << std::endl;
+                    std::setprecision(3); std::fixed;
+                    for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
+                        backup << ot->Ree2 << std::endl;
+                    }
+                    backup.close();
+                }
+                else {
+                    hd->os_log<< std::endl << "error opening " << hd->reenm << std::endl;
+                    std::cout << std::endl << "error opening " << hd->reenm << std::endl;
                 }
             }
             if(sp->tGyr) {
@@ -1015,6 +1042,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->rrunnm = "rerun.dat";
     hd->dbposi = "AnorLondo.xyz";
     hd->hbmatr = "HBmat.dat";
+    hd->reenm  = "ReeDD.dat";
     hd->tGyrnm = "tGyr.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->lognm  = "out.log";
@@ -1219,6 +1247,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_ETru= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
+    int read_Ree = 0;
     int read_tGyr= 0;
     int read_WCon= 0;
     int read_ConE= 0;
@@ -1293,6 +1322,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("HB_ContMat")==0 ) {
                     if( value.compare("true")==0 ) { sp->HB_ContMat = true; read_HBCM = 1; }
                     else if( value.compare("false")==0 ) { sp->HB_ContMat = false; read_HBCM = 1; } }
+                else if( option.compare("Ree")==0 ) {
+                    if( value.compare("true")==0 ) { sp->Ree = true; read_Ree = 1; }
+                    else if( value.compare("false")==0 ) { sp->Ree = false; read_Ree = 1; } }
                 else if( option.compare("tGyr")==0 ) {
                     if( value.compare("true")==0 ) {sp->tGyr = true; read_tGyr = 1; }
                     else if( value.compare("false")==0 ) { sp->tGyr = false; read_tGyr = 1; } }
@@ -2968,6 +3000,7 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
     delete[] ot->H;
     delete[] ot->lngE;
     delete[] ot->contHB;
+    delete[] ot->Ree2;
     for( int i=0; i<sp->N_CH; i++ ) { delete[] ot->rGyr[i]; }
     delete[] ot->rGyr;
     delete[] ot->rGyrCur;

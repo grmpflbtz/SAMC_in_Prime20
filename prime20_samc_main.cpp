@@ -763,9 +763,7 @@ int main(int argc, char *argv[])
                             oss.str("");
                             oss << "coordinates_E" << i << "_" << ot->conf_n[i] << ".xyz";
                             filename = oss.str();
-                            if( outputPositions(sp,hd, filename, Chn, 1, Eold) ) {
-                                std::cout << std::endl << "wrote coordinate file " << filename << " at E=" << Eold << std::endl;
-                            }
+                            outputPositions(sp,hd, filename, Chn, 1, Eold);
                             ot->conf_n[i]++;
                             ot->conf_wt[i]=step;
                         }

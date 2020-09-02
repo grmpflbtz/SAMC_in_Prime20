@@ -58,7 +58,7 @@ struct Header {
     std::string rrunnm;     // input file name rerun file input
     std::string dbposi;     // output file name debug position
     std::string hbmatr;     // output file name HB matrices
-    std::string Reenm;      // output file name end-to-end distance distribution
+    std::string reenm;      // output file name end-to-end distance distribution
     std::string tGyrnm;     // output file name tensor of gyration
     std::string grdcnm;     // output file name ground state configuration
     std::string lognm;      // output file system log
@@ -70,7 +70,7 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
-    double *Ree;                    // end-to-end distance distribution
+    double *Ree2;                   // squared end-to-end distance distribution
     double **rGyr;                  // sum radius of gyration for each chain and energy bin
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin

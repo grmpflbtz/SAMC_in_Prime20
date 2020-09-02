@@ -765,7 +765,7 @@ int main(int argc, char *argv[])
             if(sp->Ree) {
                 for( int i=0; i<sp->N_CH; i++ ) {
                     std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i].AmAc[0].Bd[0], Chn[i].AmAc[sp->N_AA-1].Bd[3]);
-                    ot->Ree2[i * eBin_o] += dotPro(dist, dist);
+                    ot->Ree2[i*sp->NBin + eBin_o] += dotPro(dist, dist);
                 }
             }
             if(sp->wConfig) {
@@ -850,7 +850,7 @@ int main(int argc, char *argv[])
                     backup << "# Squared end-to-end distance distribution after " << step+1 << " steps" << std::endl;
                     std::setprecision(3); std::fixed;
                     for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
-                        backup << ot->Ree2 << std::endl;
+                        backup << ot->Ree2[i]/(double)ot->H[i%sp->NBin] << std::endl;
                     }
                     backup.close();
                 }

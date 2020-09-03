@@ -358,7 +358,7 @@ int main(int argc, char *argv[])
         }
         deltaE = 0.0;
         // select move type
-        moveselec = trunc(((double)rng()/(double)rng.max())*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
+        moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
         //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
         if( moveselec < sp->WT_WIGGLE )                                         { movetype = 0; }   // wiggle
         else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                         { movetype = 1; }   // rotPhi
@@ -491,7 +491,7 @@ int main(int argc, char *argv[])
             }
 
             // select move type
-            moveselec = trunc(((double)rng()/(double)rng.max())*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
+            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
             //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
             if( moveselec < sp->WT_WIGGLE )                                             { movetype = 0; }   // wiggle
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI) )                           { movetype = 1; }   // rotPhi
@@ -1218,8 +1218,10 @@ bool readParaInput(SysPara *sp, Header *hd)
     stringstream ss_line, ss_ener;
     std::string s_line, option, value;
     double d;
+    bool read_all = true;
 
     std::cout << "reading parameter input ... ";
+    hd->os_log<< "reading parameter input ... ";
 
     int read_NCH = 0;
     int read_NAA = 0;
@@ -1356,9 +1358,107 @@ bool readParaInput(SysPara *sp, Header *hd)
         sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
         sp->stepit = 4*sp->N_AA*sp->N_CH;
 
+        if( read_NCH  == 0 ){ read_all = false;
+            std::cout  << "Warning! N_CH not read. " << std::endl; 
+            hd->os_log << "Warning! N_CH not read. " << std::endl;}
+        if( read_NAA  == 0 ){ read_all = false;
+            std::cout  << "Warning! N_AA not read. " << std::endl; 
+            hd->os_log << "Warning! N_AA not read. " << std::endl;}
+        if( read_AAS  == 0 ){ read_all = false;
+            std::cout  << "Warning! AAseq not read. " << std::endl; 
+            hd->os_log << "Warning! AAseq not read. " << std::endl;}
+        if( read_L    == 0 ){ read_all = false;
+            std::cout  << "Warning! L not read. " << std::endl; 
+            hd->os_log << "Warning! L not read. " << std::endl;}
+        if( read_NBin == 0 ){ read_all = false;
+            std::cout  << "Warning! NBin not read. " << std::endl; 
+            hd->os_log << "Warning! NBin not read. " << std::endl;}
+        if( read_EMin == 0 ){ read_all = false;
+            std::cout  << "Warning! EMin not read. " << std::endl; 
+            hd->os_log << "Warning! EMin not read. " << std::endl;}
+        if( read_EMax == 0 ){ read_all = false;
+            std::cout  << "Warning! EMax not read. " << std::endl; 
+            hd->os_log << "Warning! EMax not read. " << std::endl;}
+        if( read_ESt  == 0 ){ read_all = false;
+            std::cout  << "Warning! EStart not read. " << std::endl; 
+            hd->os_log << "Warning! EStart not read. " << std::endl;}
+        if( read_tSt  == 0 ){ read_all = false;
+            std::cout  << "Warning! tStart not read. " << std::endl; 
+            hd->os_log << "Warning! tStart not read. " << std::endl;}
+        if( read_T0   == 0 ){ read_all = false;
+            std::cout  << "Warning! T_0 not read. " << std::endl; 
+            hd->os_log << "Warning! T_0 not read. " << std::endl;}
+        if( read_TMax == 0 ){ read_all = false;
+            std::cout  << "Warning! T_Max not read. " << std::endl; 
+            hd->os_log << "Warning! T_Max not read. " << std::endl;}
+        if( read_TWrt == 0 ){ read_all = false;
+            std::cout  << "Warning! T_Write not read. " << std::endl; 
+            hd->os_log << "Warning! T_Write not read. " << std::endl;}
+        if( read_TBCR == 0 ){ read_all = false;
+            std::cout  << "Warning! T_BCReset not read. " << std::endl; 
+            hd->os_log << "Warning! T_BCReset not read. " << std::endl;}
+        if( read_Gam0 == 0 ){ read_all = false;
+            std::cout  << "Warning! gamma_0 not read. " << std::endl; 
+            hd->os_log << "Warning! gamma_0 not read. " << std::endl;}
+        if( read_NBox == 0 ){ read_all = false;
+            std::cout  << "Warning! NBox not read. " << std::endl; 
+            hd->os_log << "Warning! NBox not read. " << std::endl;}
+        if( read_LBox == 0 ){ read_all = false;
+            std::cout  << "Warning! LBox not read. " << std::endl; 
+            hd->os_log << "Warning! LBox not read. " << std::endl;}
+        if( read_WTWi == 0 ){ read_all = false;
+            std::cout  << "Warning! WT_wiggle not read. " << std::endl; 
+            hd->os_log << "Warning! WT_wiggle not read. " << std::endl;}
+        if( read_WTPh == 0 ){ read_all = false;
+            std::cout  << "Warning! WT_phi not read. " << std::endl; 
+            hd->os_log << "Warning! WT_phi not read. " << std::endl;}
+        if( read_WTPs == 0 ){ read_all = false;
+            std::cout  << "Warning! WT_psi not read. " << std::endl; 
+            hd->os_log << "Warning! WT_psi not read. " << std::endl;}
+        if( read_WTTr == 0 ){ read_all = false;
+            std::cout  << "Warning! WT_trans not read. " << std::endl; 
+            hd->os_log << "Warning! WT_trans not read. " << std::endl;}
+        if( read_Disp == 0 ){ read_all = false;
+            std::cout  << "Warning! DispMax not read. " << std::endl; 
+            hd->os_log << "Warning! DispMax not read. " << std::endl;}
+        if( read_DPhi == 0 ){ read_all = false;
+            std::cout  << "Warning! dPhi_Max not read. " << std::endl; 
+            hd->os_log << "Warning! dPhi_Max not read. " << std::endl;}
+        if( read_DPsi == 0 ){ read_all = false;
+            std::cout  << "Warning! dPsi_Max not read. " << std::endl; 
+            hd->os_log << "Warning! dPsi_Max not read. " << std::endl;}
+        if( read_ETru == 0 ){ read_all = false;
+            std::cout  << "Warning! EtruncUp not read. " << std::endl; 
+            hd->os_log << "Warning! EtruncUp not read. " << std::endl;}
+        if( read_FixL == 0 ){ read_all = false;
+            std::cout  << "Warning! Fix_lngU not read. " << std::endl; 
+            hd->os_log << "Warning! Fix_lngU not read. " << std::endl;}
+        if( read_HBCM == 0 ){ read_all = false;
+            std::cout  << "Warning! HB_ContMat not read. " << std::endl; 
+            hd->os_log << "Warning! HB_ContMat not read. " << std::endl;}
+        if( read_Ree  == 0 ){ read_all = false;
+            std::cout  << "Warning! Ree not read. " << std::endl; 
+            hd->os_log << "Warning! Ree not read. " << std::endl;}
+        if( read_tGyr == 0 ){ read_all = false;
+            std::cout  << "Warning! tGyr not read. " << std::endl; 
+            hd->os_log << "Warning! tGyr not read. " << std::endl;}
+        if( read_WCon == 0 ){ read_all = false;
+            std::cout  << "Warning! wConfig not read. " << std::endl; 
+            hd->os_log << "Warning! wConfig not read. " << std::endl;}
+        if( read_ConE == 0 ){ read_all = false;
+            std::cout  << "Warning! ConfigE not read. " << std::endl; 
+            hd->os_log << "Warning! ConfigE not read. " << std::endl;}
+        if( read_ConV == 0 ){ read_all = false;
+            std::cout  << "Warning! ConfigV not read. " << std::endl; 
+            hd->os_log << "Warning! ConfigV not read. " << std::endl;}
+
         ifstr.close();
-        std::cout << "done" << std::endl;
-        return true;   
+        if(read_all) {
+            std::cout << "done" << std::endl;
+            hd->os_log<< "done" << std::endl;
+            return true;  
+        } 
+        return false;
     }
     else {
         hd->os_log<< "failed" << std::endl << " -- ERROR --\t" << hd->paranm << " not found" << std::endl;

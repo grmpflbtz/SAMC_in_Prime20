@@ -371,23 +371,23 @@ int main(int argc, char *argv[])
 
         switch( movetype ) {
             case 0:
-                i_rand = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA*4));
+                i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
                 ip = i_rand/4;                              // amino acid identifier
                 jp = i_rand%4;                              // bead
                 accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                 break;
             case 1:
-                ip = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                jp = trunc(((double)rng()/(double)rng.max())*2);                                      // rotate lower or higher part
+                ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                jp = trunc(((double)rng()/((double)rng.max()+1))*2);                                      // rotate lower or higher part
                 accept = rotPhi(sp, Chn, ip, jp, deltaE);
                 break;
             case 2:
-                ip = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                jp = trunc(((double)rng()/(double)rng.max())*2);                    // rotate lower or higher part
+                ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
                 accept = rotPsi(sp, Chn, ip, jp, deltaE);
                 break;
             case 3:
-                ip = trunc(((double)rng()/(double)rng.max())*sp->N_CH);
+                ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                 accept = translation(sp, Chn, ip, deltaE);
                 break;
             default:
@@ -510,15 +510,15 @@ int main(int argc, char *argv[])
             ot->nattempt[movetype]++;
             switch( movetype ) {
                 case 0:
-                    i_rand = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA*4));
+                    i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
                     BdCpy[ip*4+jp] = Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp];
                     accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                     break;
                 case 1:
-                    ip = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/(double)rng.max())*2);                    // rotate lower or higher part
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
                     switch( jp ) {
                         case 0:
                             for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
@@ -537,8 +537,8 @@ int main(int argc, char *argv[])
                     accept = rotPhi(sp, Chn, ip, jp, deltaE);
                     break;
                 case 2:
-                    ip = trunc(((double)rng()/(double)rng.max())*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/(double)rng.max())*2);                    // rotate lower or higher part
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
                     switch( jp ) {
                         case 0:
                             for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
@@ -557,7 +557,7 @@ int main(int argc, char *argv[])
                     accept = rotPsi(sp, Chn, ip, jp, deltaE);
                     break;
                 case 3:
-                    ip = trunc(((double)rng()/(double)rng.max())*sp->N_CH);
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                     for( int i=0; i<sp->N_AA; i++ ) {
                         for( int j=0; j<4; j++ ) {
                             BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];

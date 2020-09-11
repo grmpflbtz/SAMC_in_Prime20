@@ -1352,7 +1352,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                             }
                         }
                     }
-                    else if( value.compare("false")==0 ) { sp->wConfig = false; read_WCon = 1; } }
+                    else if( value.compare("false")==0 ) { 
+                        sp->wConfig = false; 
+                        read_WCon = 1; read_ConE = 1; read_ConV = 1; } }
             }
         }
         sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;

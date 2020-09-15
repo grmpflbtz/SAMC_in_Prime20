@@ -298,7 +298,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        std::cout << "done" << std::endl;
+        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { std::cout << "overlapp in chain !!!" << std::endl; }
+        else { std::cout << "done" << std::endl; }
     }
 
 
@@ -1129,7 +1130,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
     ZrotMtrx[2][1] = 0.0;
     ZrotMtrx[2][2] = 1.0;
         // rotation matrix around X axis
-    XrotAng = 11.0*M_PI/10.0;
+    XrotAng = -11.0*M_PI/10.0;
     XrotMtrx[0][0] = 1.0;
     XrotMtrx[0][1] = 0.0;
     XrotMtrx[0][2] = 0.0;
@@ -1176,7 +1177,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
                             Chn[chnNum].AmAc[i].Bd[2].getR(1)*Chn[chnNum].AmAc[i].Bd[2].getR(1) + rad*rad -                             // + yC^2 + r^2
                             Chn[chnNum].AmAc[i].getDisR(2)*Chn[chnNum].AmAc[i].getDisR(2) )                                             // - CR^2
                             / ( 2*Chn[chnNum].AmAc[i].Bd[2].getR(1) );                                                          // / 2*yC
-        variaMtrx[2] = sqrt( rad*rad - variaMtrx[1]*variaMtrx[1] );
+        variaMtrx[2] = -sqrt( rad*rad - variaMtrx[1]*variaMtrx[1] );
 
         Chn[chnNum].AmAc[i].Bd[3].setR(variaMtrx[0], variaMtrx[1], variaMtrx[2]);
     }

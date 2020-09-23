@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
 
     // geometry: read from input file or create new
     if( !readCoord(sp, hd, Chn) ) {
-        std::cout << "building new Chain ... ... " << std::flush;
+        std::cout << "building new chain(s) ... " << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -1043,7 +1043,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->rrunnm = "rerun.dat";
     hd->dbposi = "AnorLondo.xyz";
     hd->hbmatr = "HBmat.dat";
-    hd->reenm  = "ReeDD.dat";
+    hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->lognm  = "out.log";
@@ -1767,7 +1767,7 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned l
         results << "# current runtime: " << Timer.curRunTime() << std::endl;
         results << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
         results << "# measured observables are:" << std::endl;
-        results << "\tvisit histogram H" << std::endl;
+        results << "#\tvisit histogram H" << std::endl;
         if(sp->HB_ContMat)   { results << "#\tHB contact matrices (file HBmat.dat)" << std::endl; }
         if(sp->wConfig) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
         results << "Bin from to H" << std::endl;
@@ -1947,7 +1947,7 @@ double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, in
                     std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*sypa->N_AA)].AmAc[(index/4)%sypa->N_AA].Bd[index%4]);
                     dist2 = dotPro(distV, distV);
                     if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*sypa->N_AA), (index/4)%sypa->N_AA, index%4) ) { 
-                        //std::cerr << "overlapp: C" << h1 << "A" << i1 << "B" << j1 << " - C" << index/(4*N_AA) << "A" << (index/4)%N_AA << "B" << index%4 << std::endl;
+                        //std::cerr << "overlapp: C" << h1 << "A" << i1 << "B" << j1 << " - C" << index/(4*sypa->N_AA) << "A" << (index/4)%sypa->N_AA << "B" << index%4 << std::endl;
                         return -1.0; 
                     }
                 }

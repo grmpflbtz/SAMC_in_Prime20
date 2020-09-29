@@ -40,8 +40,8 @@ struct SysPara {
     double DISP_MAX;        // maximum local displacement
     double DPHI_MAX;        // maximum angle phi rotation
     double DPSI_MAX;        // maximum angle psi rotation
-    double DTRN_Max;        // maximum chain translation
-    double DROT_Mat;        // maximum angle chain rotation
+    double DTRN_MAX;        // maximum chain translation
+    double DROT_MAX;        // maximum angle chain rotation
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables

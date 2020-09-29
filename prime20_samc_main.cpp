@@ -2765,10 +2765,11 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
 bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
 {
     Bead BdCpy[4*sp->N_AA];
-    double Eold;
+    double Eold, dEhb, dist2;
     double angle, axisPolar, axisAzim, cos_a, sin_a;
-    double rotAxis[3], com[3];
+    double rotAxis[3], com[3], dVec[3], newpos[3];
     double rotMtrx[3][3];
+    int BrokenHB[sp->N_AA*sp->N_CH][2], nBHB;
 
     for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
@@ -2797,13 +2798,91 @@ bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
     for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
             for( int k=0; k<3; k++ ) {
-                com[k] += Chn[iChn].AmAc[i].Bd[j].getR( k ) + Chn[iChn].AmAc[i].Bd[j].getBC( k )*sp->L) * Chn[iChn].AmAc[i].Bd[j].getM();
+                com[k] += (Chn[iChn].AmAc[i].Bd[j].getR( k ) + Chn[iChn].AmAc[i].Bd[j].getBC( k )*sp->L) * Chn[iChn].AmAc[i].Bd[j].getM();
             }
         }
     }
+    com[0] /= Chn[iChn].getM();    com[1] /= Chn[iChn].getM();    com[2] /= Chn[iChn].getM();
     // distance calc - rotated vector
+    for(int i=0; i<sp->N_AA; i++){
+        for(int j=0; j<4; j++) {
+            for(int k=0; k<3; k++ ){
+                dVec[k] = Chn[iChn].AmAc[i].Bd[j].getR(k) + Chn[iChn].AmAc[i].Bd[j].getBC(k)*sp->L - com[k];
+            }
+            for( int k=0; k<3; k++ ) {
+                newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + com[k];
+                Chn[iChn].AmAc[i].Bd[j].setBC( k, floor(newpos[k]/sp->L) );
+                newpos[k] = newpos[k] - sp->L*floor(newpos[k]/sp->L);
+            }
+            Chn[iChn].AmAc[i].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+            // overlapp check
+            if( EO_SegBead(sp, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0) == -1 || EO_SegBead(sp, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0 ) ) {
+                for( int k=0; k<i+1; k++ ) {
+                    for( int m=0; m<4; m++ ) {
+                        Chn[iChn].AmAc[k].Bd[m] = BdCpy[k*4+m];        // reset chain & exit
+                    }
+                }
+                return false;
+            }
+        }
+    }
     // energy calculation
-    
+    // break old HB
+    nBHB = -1;          // no. broken HB
+    dEhb = 0.0;         // change in energy due to HB
+    for( int i=iChn*sp->N_AA; i<(iChn+1)*sp->N_AA; i++ ) {
+        if( (HBList[i][0] <= iChn*sp->N_AA || HBList[i][0] >= (iChn+1)*sp->N_AA) && HBList[i][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i;
+            BrokenHB[nBHB][1] = HBList[i][0];
+            HBList[HBList[i][0]][1] = -1;
+            HBList[i][0] = -1;
+            dEhb += 1.0;
+        }
+        if( (HBList[i][1] <= iChn*sp->N_AA || HBList[i][1] >= (iChn+1)*sp->N_AA) && HBList[i][1] > -1 ) {
+            BrokenHB[++nBHB][1] = i;
+            BrokenHB[nBHB][0] = HBList[i][1];
+            HBList[HBList[i][1]][0] = -1;
+            HBList[i][1] = -1;
+            dEhb += 1.0;
+        }
+    }
+    // close new HB
+    for( int m=iChn*sp->N_AA; m<(iChn+1)*sp->N_AA; m++ ) {
+        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+            if( n >= iChn*sp->N_AA && n < (iChn+1)*sp->N_AA) continue;
+            if( (m/sp->N_AA != n/sp->N_AA) || (( m/sp->N_AA == n/sp->N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sp, Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[0], Chn[n/sp->N_AA].AmAc[n%sp->N_AA].Bd[2]);
+                dist2 = dotPro(dVec, dVec);
+                if( dist2 < SW2HUGE )   { NCDist[m][n] = dist2; }
+                else                    { NCDist[m][n] = -1; }
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sp, Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[2], Chn[n/sp->N_AA].AmAc[n%sp->N_AA].Bd[0]);
+                dist2 = dotPro(dVec, dVec);
+                if( dist2 < SW2HUGE )   { NCDist[n][m] = dist2; }
+                else                    { NCDist[n][m] = -1; }
+            }
+            else {
+                NCDist[m][n] = -1;
+                NCDist[n][m] = -1;
+            }
+            if(HBcheck(sp, Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(sp, Chn, n, m)) dEhb -= 1.0;
+        }
+    }
+    if( nBHB >= 0 ) {       // previously broken HB can rebond
+        for( int i=0; i<nBHB+1; i++ ) {
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                if(HBcheck(sp, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(sp, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            }
+        }
+    }
+    for( int i=0; i<sp->N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            LinkListUpdate(sp, Chn, iChn*sp->N_AA+i, j);
+        }
+    }
+
+    deltaE = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
 
     return true;
 }

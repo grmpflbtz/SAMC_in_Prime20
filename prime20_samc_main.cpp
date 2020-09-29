@@ -1721,35 +1721,36 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
     ofstream backup;
     backup.open(name);
     if( backup.is_open() ) {
-        backup << "# SAMC DoS of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << endl;
-        backup << "# sequence " << sp->AA_seq << endl;
-        backup << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << endl;
-        backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << endl;
-        backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << endl;
-        backup << "# current runtime: " << Timer.curRunTime() << endl;
-        backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << endl;
-        backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) local moves" << endl;
-        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) pivot (Phi) moves" << endl;
-        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) pivot (Psi) moves" << endl;
-        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) translation moves" << endl;
-        backup << "bin  from  to  lng  H" << endl;
+        backup << "# SAMC simulation of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
+        backup << "# length of simulation box L = " << sp->L << std::endl;
+        backup << "# sequence " << sp->AA_seq << std::endl;
+        backup << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << std::endl;
+        backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << std::endl;
+        backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << std::endl;
+        backup << "# current runtime: " << Timer.curRunTime() << std::endl;
+        backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
+        backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) local moves" << std::endl;
+        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) pivot (Phi) moves" << std::endl;
+        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) pivot (Psi) moves" << std::endl;
+        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) translation moves" << std::endl;
+        backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << ot->lngE[i] << " " << ot->H[i] << endl;
+            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << ot->lngE[i] << " " << ot->H[i] << std::endl;
         }
-        backup << "# current configuration ( E=" << E << ")" << endl;
+        backup << "# current configuration ( E=" << E << ")" << std::endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2) << endl;
-            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2) << endl;
+            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2) << std::endl;
         }
         backup.close();
         return true;
     }
     else {
-        hd->os_log<< endl << "--- ERROR ---\tfailed to open " << name << std::endl;
-        std::cout << endl << "--- ERROR ---\tfailed to open " << name << std::endl;
+        hd->os_log<< std::endl << "--- ERROR ---\tfailed to open " << name << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tfailed to open " << name << std::endl;
         return false;
     }
 }
@@ -1762,6 +1763,7 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned l
     results.open(name);
     if( results.is_open() ) {
         results << "# Observables for " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
+        results << "# length of simulation box L = " << sp->L << std::endl;
         results << "# sequence " << sp->AA_seq << std::endl;
         results << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << std::endl;
         results << "# current runtime: " << Timer.curRunTime() << std::endl;

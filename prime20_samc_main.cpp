@@ -112,7 +112,7 @@ int cur_time_print(ostream &os);                                                
 int CommandInitialize(int argc, char *argv[], Header *hd);                              // identify file names from command input
 
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
-bool readParaInput(SysPara *sp, Header *hd);                                            // read system arameters from file
+bool readParaInput(SysPara *sp, Header *hd);                                            // read system parameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
@@ -133,6 +133,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);     
 bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around N_AA-Ca axis of i1-th amino acid
 bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around Ca-C axis of i1-th amino acid
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
+bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
 
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
@@ -183,7 +184,10 @@ int main(int argc, char *argv[])
     program_start_print(hd->os_log);
     command_print(hd, hd->os_log);
 
-    readParaInput(sp, hd);
+    if( !readParaInput(sp, hd) ) {
+        delete sp; delete hd; delete ot;
+        return 0;
+    }
 
     system_parameter_print(sp, std::cout);
     system_parameter_print(sp, hd->os_log);
@@ -1247,6 +1251,8 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_Disp= 0;
     int read_DPhi= 0;
     int read_DPsi= 0;
+    int read_DTrn= 0;
+    int read_DRot= 0;
     int read_ETru= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
@@ -1314,6 +1320,10 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->DPHI_MAX = stod(value, nullptr); read_DPhi = 1; }
                 else if( option.compare("DPSI_MAX")==0 ) {
                     sp->DPSI_MAX = stod(value, nullptr); read_DPsi = 1; }
+                else if( option.compare("DTRN_MAX")==0 ) {
+                    sp->DTRN_MAX = stod(value, nullptr); read_DTrn = 1; }
+                else if( option.compare("DROT_MAX")==0 ) {
+                    sp->DROT_MAX = stod(value, nullptr); read_DRot = 1; }
                 else if( option.compare("EBIN_TRUNC_UP")==0 ) {
                     if( value.compare("true")==0 ) { 
                         sp->EBIN_TRUNC_UP = true; read_ETru = 1; }
@@ -1430,6 +1440,12 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_DPsi == 0 ){ read_all = false;
             std::cout  << "Warning! dPsi_Max not read. " << std::endl; 
             hd->os_log << "Warning! dPsi_Max not read. " << std::endl;}
+        if( read_DTrn == 0 ){ read_all = false;
+            std::cout  << "Warning! dTrn_Max not read. " << std::endl; 
+            hd->os_log << "Warning! dTrn_Max not read. " << std::endl;}
+        if( read_DRot == 0 ){ read_all = false;
+            std::cout  << "Warning! dRot_Max not read. " << std::endl; 
+            hd->os_log << "Warning! dRot_Max not read. " << std::endl;}
         if( read_ETru == 0 ){ read_all = false;
             std::cout  << "Warning! EtruncUp not read. " << std::endl; 
             hd->os_log << "Warning! EtruncUp not read. " << std::endl;}
@@ -2656,19 +2672,19 @@ bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
 // translation move of a whole chain
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
 {
-    Bead Bdcpy[4*sp->N_AA];                 // copy of beads in moved chain
+    Bead BdCpy[4*sp->N_AA];                 // copy of beads in moved chain
     double dVec[3], newpos[3];          // displacement vector, new position (before PBC)
     double Eold, dEhb, distabs;
     int BrokenHB[sp->N_AA][2], nBHB;
 
     for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
-            Bdcpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
+            BdCpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
         }
     }
     Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
     for( int i=0; i<3; i++ ) {
-        dVec[i] = ( ((double)rng()/(double)rng.max())*2 - 1. )*PBND_CaCa*2.0;
+        dVec[i] = ( ((double)rng()/(double)rng.max())*2 - 1. )*sp->DTRN_MAX;
     }
 
     for( int i=0; i<sp->N_AA; i++ ) {
@@ -2683,7 +2699,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
             if( EO_SegBead(sp, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0) == -1 || EO_SegBead(sp, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0) == -1 ) {
                 for( int m=0; m<i+1; m++ ) {
                     for( int n=0; n<4; n++ ) {
-                        Chn[iChn].AmAc[m].Bd[n] = Bdcpy[m*4+n];     // reset chain & exit
+                        Chn[iChn].AmAc[m].Bd[n] = BdCpy[m*4+n];     // reset chain & exit
                     }
                 }
                 return false;
@@ -2742,6 +2758,52 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
     }
 
     deltaE = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
+
+    return true;
+}
+// rotation move of a whole chain
+bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
+{
+    Bead BdCpy[4*sp->N_AA];
+    double Eold;
+    double angle, axisPolar, axisAzim, cos_a, sin_a;
+    double rotAxis[3], com[3];
+    double rotMtrx[3][3];
+
+    for( int i=0; i<sp->N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            BdCpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
+        }
+    }
+    Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
+
+    angle = ((double)rng()/(double)rng.max()) * sp->DROT_MAX;       // angle of rotation
+    cos_a = cos(angle); sin_a = sin(angle);
+    axisPolar = ((double)rng()/(double)rng.max()) * M_PI;           // polar angle of rotation axis
+    axisAzim = ((double)rng()/(double)rng.max()) * M_PI*2.0;        // azimuthal angle of rotation axis
+    rotAxis[0] = cos(axisAzim)*sin(axisPolar);  rotAxis[1] = sin(axisAzim)*sin(axisPolar);  rotAxis[2] = cos(axisPolar);
+    // rotation matrix
+    rotMtrx[0][0] = cos_a + rotAxis[0]*rotAxis[0]*(1-cos_a);
+    rotMtrx[0][1] = rotAxis[0]*rotAxis[1]*(1-cos_a) - rotAxis[2]*sin_a;
+    rotMtrx[0][2] = rotAxis[0]*rotAxis[2]*(1-cos_a) + rotAxis[1]*sin_a;
+    rotMtrx[1][0] = rotAxis[1]*rotAxis[0]*(1-cos_a) + rotAxis[2]*sin_a;
+    rotMtrx[1][1] = cos_a + rotAxis[1]*rotAxis[1]*(1-cos_a);
+    rotMtrx[1][2] = rotAxis[1]*rotAxis[2]*(1-cos_a) - rotAxis[0]*sin_a;
+    rotMtrx[2][0] = rotAxis[2]*rotAxis[0]*(1-cos_a) - rotAxis[1]*sin_a;
+    rotMtrx[2][1] = rotAxis[2]*rotAxis[1]*(1-cos_a) + rotAxis[0]*sin_a;
+    rotMtrx[2][2] = cos_a + rotAxis[2]*rotAxis[2]*(1-cos_a);
+    // center of mass
+    com[0]=0.0; com[1]=0.0; com[2]=0.0;
+    for( int i=0; i<sp->N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            for( int k=0; k<3; k++ ) {
+                com[k] += Chn[iChn].AmAc[i].Bd[j].getR( k ) + Chn[iChn].AmAc[i].Bd[j].getBC( k )*sp->L) * Chn[iChn].AmAc[i].Bd[j].getM();
+            }
+        }
+    }
+    // distance calc - rotated vector
+    // energy calculation
+    
 
     return true;
 }

@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-//mt19937 rng(time(NULL));                // constructor for random number generator
-mt19937 rng(42);                        // debug
+mt19937 rng(time(NULL));                // constructor for random number generator
+//mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -373,9 +373,6 @@ int main(int argc, char *argv[])
             hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
             std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
         }
-
-        movetype = 4;
-
         switch( movetype ) {
             case 0:
                 i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
@@ -406,12 +403,6 @@ int main(int argc, char *argv[])
         }
 
         if(accept) {        // legal move
-
-
-            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-
-
-
             Eold += deltaE;
             // sync HBDist[] and HBDcpy[]
             switch( movetype ) {

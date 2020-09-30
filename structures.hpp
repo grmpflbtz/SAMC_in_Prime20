@@ -34,6 +34,7 @@ struct SysPara {
     int WT_PHI;             // weight rotPhi
     int WT_PSI;             // weight rotPsi
     int WT_TRANS;           // weight translation
+    int WT_ROT;             // weight rotation 
     int WT_ROSENC;
     int WT_ROSENN;
     // movement restraints
@@ -79,8 +80,8 @@ struct Output {
     double **tGyrEigCur;            // current principal moments of tensor of gyration
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
-    long unsigned int nattempt[4];  // # of attempted moves
-    long unsigned int naccept[4];   // # of accepted moves
+    long unsigned int nattempt[5];  // # of attempted moves
+    long unsigned int naccept[5];   // # of accepted moves
 };
 
 

@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-mt19937 rng(time(NULL));                // constructor for random number generator
-//mt19937 rng(42);                        // debug
+//mt19937 rng(time(NULL));                // constructor for random number generator
+mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -236,7 +236,7 @@ int main(int argc, char *argv[])
     cur_time_print(hd->os_log);
 
     // initialization of some values
-    for( int i=0; i<4; i++ ) {
+    for( int i=0; i<5; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
     }
@@ -363,16 +363,18 @@ int main(int argc, char *argv[])
         }
         deltaE = 0.0;
         // select move type
-        moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
-        //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
-        if( moveselec < sp->WT_WIGGLE )                                         { movetype = 0; }   // wiggle
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                         { movetype = 1; }   // rotPhi
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )              { movetype = 2; }   // rotPsi
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS ) { movetype = 3; }   // translation
+        moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
+        if( moveselec < sp->WT_WIGGLE )                                                    { movetype = 0; }    // wiggle
+        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                                    { movetype = 1; }    // rotPhi
+        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )                         { movetype = 2; }    // rotPsi
+        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS )            { movetype = 3; }    // translation
+        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT ) { movetype = 4; }    // rotation
         else { 
             hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
             std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
         }
+
+        movetype = 4;
 
         switch( movetype ) {
             case 0:
@@ -395,11 +397,21 @@ int main(int argc, char *argv[])
                 ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                 accept = translation(sp, Chn, ip, deltaE);
                 break;
+            case 4:
+                ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                accept = rotation(sp, Chn, ip, deltaE);
+                break;
             default:
                 std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
         }
 
         if(accept) {        // legal move
+
+
+            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
+
+
+
             Eold += deltaE;
             // sync HBDist[] and HBDcpy[]
             switch( movetype ) {
@@ -472,7 +484,7 @@ int main(int argc, char *argv[])
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
             }
-            outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
+            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
             this_thread::sleep_for(chrono::milliseconds(200));
 
             return 0;
@@ -496,12 +508,13 @@ int main(int argc, char *argv[])
             }
 
             // select move type
-            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
+            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
             //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
-            if( moveselec < sp->WT_WIGGLE )                                             { movetype = 0; }   // wiggle
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI) )                           { movetype = 1; }   // rotPhi
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI) )                { movetype = 2; }   // rotPsi
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS) )   { movetype = 3; }   // translation
+            if( moveselec < sp->WT_WIGGLE )                                                      { movetype = 0; }  // wiggle
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI) )                                    { movetype = 1; }  // rotPhi
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI) )                         { movetype = 2; }  // rotPsi
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS) )            { movetype = 3; }  // translation
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT) ) { movetype = 4; }  // rotation
             else { 
                 hd->os_log<< std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; hd->os_log.close();
                 std::cerr << std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; return 0; 
@@ -570,6 +583,15 @@ int main(int argc, char *argv[])
                     }
                     accept = translation(sp, Chn, ip, deltaE);
                     break;
+                case 4:
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    for( int i=0; i<sp->N_AA; i++ ) {
+                        for( int j=0; j<4; j++ ) {
+                            BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
+                        }
+                    }
+                    accept = rotation(sp, Chn, ip, deltaE);
+                    break;
                 default:
                     std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
             }
@@ -604,7 +626,23 @@ int main(int argc, char *argv[])
                                 }
                             }
                             break;
-                        default:    // rotations
+                        case 4:     // chain rotation
+                            for( int i=0; i<sp->N_AA; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                    Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
+                                    Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                    LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
+                                }
+                                for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                                    if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
+                                        NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
+                                        NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
+                                    }
+                                }
+                            }
+                            break;
+                        default:    // pivot rotations
                             switch( jp ) {
                                 case 0:
                                     for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
@@ -720,7 +758,23 @@ int main(int argc, char *argv[])
                             }
                         }
                         break;
-                    default:    // rotation
+                    case 4:     // chain rotation
+                        for( int i=0; i<sp->N_AA; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
+                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
+                            }
+                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                                if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
+                                    NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
+                                    NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
+                                }
+                            }
+                        }
+                        break;
+                    default:    // pivot rotation
                         switch( jp ) {
                             case 0:
                                 for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
@@ -1248,6 +1302,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_WTPh= 0;
     int read_WTPs= 0;
     int read_WTTr= 0;
+    int read_WTRo= 0;
     int read_Disp= 0;
     int read_DPhi= 0;
     int read_DPsi= 0;
@@ -1314,6 +1369,8 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->WT_PSI = stoi(value, nullptr);   read_WTPs = 1; }
                 else if( option.compare("WT_TRANS")==0 ) {
                     sp->WT_TRANS = stoi(value, nullptr); read_WTTr = 1; }
+                else if( option.compare("WT_ROT")==0 ) {
+                    sp->WT_ROT = stoi(value, nullptr); read_WTRo = 1; }
                 else if( option.compare("DISP_MAX")==0 ) {
                     sp->DISP_MAX = stod(value, nullptr); read_Disp = 1; }
                 else if( option.compare("DPHI_MAX")==0 ) {
@@ -1431,6 +1488,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_WTTr == 0 ){ read_all = false;
             std::cout  << "Warning! WT_trans not read. " << std::endl; 
             hd->os_log << "Warning! WT_trans not read. " << std::endl;}
+        if( read_WTRo == 0 ){ read_all = false;
+            std::cout  << "Warning! WT_rot not read. " << std::endl; 
+            hd->os_log << "Warning! WT_rot not read. " << std::endl;}
         if( read_Disp == 0 ){ read_all = false;
             std::cout  << "Warning! DispMax not read. " << std::endl; 
             hd->os_log << "Warning! DispMax not read. " << std::endl;}
@@ -1745,10 +1805,11 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << std::endl;
         backup << "# current runtime: " << Timer.curRunTime() << std::endl;
         backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
-        backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) local moves" << std::endl;
-        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) pivot (Phi) moves" << std::endl;
-        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) pivot (Psi) moves" << std::endl;
-        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) translation moves" << std::endl;
+        backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) of local moves" << std::endl;
+        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) of pivot (Phi) moves" << std::endl;
+        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) of pivot (Psi) moves" << std::endl;
+        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) of translation moves" << std::endl;
+        backup << "# accepted " << ot->naccept[4] << " of " << ot->nattempt[4] << " (" << 100*(double)ot->naccept[4]/(double)ot->nattempt[4] << "%) of chain rotation moves" << std::endl;
         backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
             backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << ot->lngE[i] << " " << ot->H[i] << std::endl;

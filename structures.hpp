@@ -49,6 +49,7 @@ struct SysPara {
     bool HB_ContMat;        // Hydrogen bond contact matrices
     bool Ree;               // end-to-end distance distribution
     bool tGyr;              // tensor of gyration
+    bool vdWener;           // van-der-Waals energy
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         std::vector<double> ConfigE;
         double ConfigV;
@@ -78,6 +79,7 @@ struct Output {
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
+    double **vdWener;                // intra- and inter-chain van-der-Waals energy
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[5];  // # of attempted moves

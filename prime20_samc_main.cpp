@@ -140,6 +140,7 @@ bool resetBCcouter(SysPara *sp, Chain Chn[]);                                   
 
 int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate radius of gyration
 int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
+int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin);                   // calculate van-der-Waals energy
 
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
@@ -227,6 +228,8 @@ int main(int argc, char *argv[])
     }
     ot->tGyrEigCur = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
+    ot->vdWener = new double*[2*sp->N_CH];
+    for( int i=0; i<2*sp->N_CH; i++ ) { ot->vdWener[i] = new double[sp->NBin]; }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -275,6 +278,13 @@ int main(int argc, char *argv[])
     if(sp->Ree) {
         for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
             ot->Ree2[i] = 0;
+        }
+    }
+    if(sp->vdWener) {
+        for( int i=0; i<2*sp->N_CH; i++ ) {
+            for( int j=0; j<sp->NBin; j++ ) {
+                ot->vdWener[i][j] = 0;
+            }
         }
     }
     if(sp->wConfig) {
@@ -845,6 +855,9 @@ int main(int argc, char *argv[])
                 /*std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
                           << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
             }
+            if(sp->vdWener){
+                
+            }
             if( Eold < Egrd ) {
                 Egrd = Eold;
                 outputPositions(sp, hd, hd->grdcnm, Chn, 0, Eold);
@@ -868,7 +881,8 @@ int main(int argc, char *argv[])
             gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
         }
 
-        if( (step+1)%sp->T_WRITE == 0 ) {           // write Backup-File
+        // write Backup-File
+        if( (step+1)%sp->T_WRITE == 0 ) {
             if(!sp->FIX_lngE) {
                 BackupSAMCrun(sp, hd, ot, Chn, Timer, step, gammasum, gamma, Eold);
             } else {
@@ -1304,6 +1318,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_HBCM= 0;
     int read_Ree = 0;
     int read_tGyr= 0;
+    int read_vdWe= 0;
     int read_WCon= 0;
     int read_ConE= 0;
     int read_ConV= 0;
@@ -1389,6 +1404,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("tGyr")==0 ) {
                     if( value.compare("true")==0 ) {sp->tGyr = true; read_tGyr = 1; }
                     else if( value.compare("false")==0 ) { sp->tGyr = false; read_tGyr = 1; } }
+                else if( option.compare("vdWener")==0 ) {
+                    if( value.compare("true")==0 ) {sp->vdWener = true; read_vdWe = 1; }
+                    else if( value.compare("false")==0 ) { sp->vdWener = false; read_vdWe = 1; } }
                 else if( option.compare("wConfig")==0 ) {
                     if( value.compare("true")==0 ) { 
                         sp->wConfig = true;    read_WCon = 1;
@@ -1512,6 +1530,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_tGyr == 0 ){ read_all = false;
             std::cout  << "Warning! tGyr not read. " << std::endl; 
             hd->os_log << "Warning! tGyr not read. " << std::endl;}
+        if( read_vdWe == 0 ){ read_all = false;
+            std::cout  << "Warning! vdWener not read. " << std::endl; 
+            hd->os_log << "Warning! vdWener not read. " << std::endl;}
         if( read_WCon == 0 ){ read_all = false;
             std::cout  << "Warning! wConfig not read. " << std::endl; 
             hd->os_log << "Warning! wConfig not read. " << std::endl;}
@@ -3217,6 +3238,49 @@ int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
 
     }
 
+    return 0;
+}
+// calculate van-der-Waals energy
+int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin)
+{
+    int neighBox[3], centrBox[3];
+    int searchBox, neighBead;
+    int Box, dbx, dby, dbz;
+    double distV[3];
+    double dist2;
+
+    for( int i=0; i< sp->N_CH; i++) {
+        for( int j=0; j<sp->N_AA; j++ ) {
+            for( int k=0; k<4; k++ ) {
+                Box = Chn[i].AmAc[j].Bd[k].getBox();
+                centrBox[0] = Box % sp->NBOX;
+                centrBox[1] = (Box/sp->NBOX) % sp->NBOX;
+                centrBox[2] = Box/(double)(sp->NBOX*sp->NBOX);
+                for( int i=0; i<27; i++ ) {
+                    dbx = i%3; dby = (i/3)%3; dbz = i/9;
+                    neighBox[0] = (centrBox[0] + dbx-1 + sp->NBOX) % sp->NBOX;
+                    neighBox[1] = (centrBox[1] + dby-1 + sp->NBOX) % sp->NBOX;
+                    neighBox[2] = (centrBox[2] + dbz-1 + sp->NBOX) % sp->NBOX;
+                    searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
+                    neighBead = neighHead[searchBox];
+                    while(neighBead!=-1) {
+                        if( neighBead%4 == 3 ) {
+                            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[k], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
+                            dist2 = dotPro(distV, distV);
+                            // intra-chain SC contact
+                            if( neighBead >= i*sp->N_AA && neighBead < (i+1)*sp->N_AA ) {
+                                ot->vdWener[i][eBin] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                            }
+                            // inter-chain SC contact
+                            else {
+                                ot->vdWener[sp->N_CH + i][eBin] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     return 0;
 }
 

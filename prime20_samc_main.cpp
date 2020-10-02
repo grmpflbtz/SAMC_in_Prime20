@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-mt19937 rng(time(NULL));                // constructor for random number generator
-//mt19937 rng(42);                        // debug
+//mt19937 rng(time(NULL));                // constructor for random number generator
+mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -119,6 +119,7 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot);                            
 
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
+bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
@@ -228,8 +229,7 @@ int main(int argc, char *argv[])
     }
     ot->tGyrEigCur = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
-    ot->vdWener = new double*[2*sp->N_CH];
-    for( int i=0; i<2*sp->N_CH; i++ ) { ot->vdWener[i] = new double[sp->NBin]; }
+    ot->vdWener = new double[sp->NBin * 2*sp->N_CH];
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -281,10 +281,8 @@ int main(int argc, char *argv[])
         }
     }
     if(sp->vdWener) {
-        for( int i=0; i<2*sp->N_CH; i++ ) {
-            for( int j=0; j<sp->NBin; j++ ) {
-                ot->vdWener[i][j] = 0;
-            }
+        for( int i=0; i<sp->NBin* 2*sp->N_CH; i++ ) {
+            ot->vdWener[i] = 0;
         }
     }
     if(sp->wConfig) {
@@ -856,7 +854,7 @@ int main(int argc, char *argv[])
                           << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
             }
             if(sp->vdWener){
-                
+                calc_vanderWaals(sp, ot, Chn, eBin_o);
             }
             if( Eold < Egrd ) {
                 Egrd = Eold;
@@ -925,6 +923,9 @@ int main(int argc, char *argv[])
             }
             if(sp->tGyr) {
                 output_tGyr(sp, hd, ot, step+1);
+            }
+            if(sp->vdWener) {
+                output_vdW(sp, hd, ot, step+1);
             }
         }
 
@@ -1047,6 +1048,7 @@ int command_print(Header *hd, ostream &os)
        << "Output debug position:       " << hd->dbposi << std::endl
        << "Output HB matrix:            " << hd->hbmatr << std::endl
        << "Output inertia tensor:       " << hd->tGyrnm << std::endl
+       << "Output van-der-Waals energy: " << hd->vdWnm  << std::endl
        << "Output ground state config.: " << hd->grdcnm << std::endl
        << "Output simulation log:       " << hd->lognm  << std::endl;
     return 0;
@@ -1084,6 +1086,8 @@ int sim_parameter_print(SysPara *sp, ostream &os)
             for( int i=0; i<sp->ConfigE.size(); i++ ) { os << " " << sp->ConfigE.at(i); }
             os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl;
         }
+        if( sp->vdWener == true ) { obs = 1;
+            os << "- van-der-Waals energy (intra- & inter-chain)" << std::endl; }
         if(obs == 0) {
             os << "... no observables" << std::endl;
         }
@@ -1108,6 +1112,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->hbmatr = "HBmat.dat";
     hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
+    hd->vdWnm  = "vdWE.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->lognm  = "out.log";
 
@@ -1155,7 +1160,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
 
     return 0;
 }
-// Head of colsole output
+// prints simulation start time
 int cur_time_print(ostream &os)
 {
     time_t curtime;
@@ -1782,7 +1787,8 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
     ofstream ostr;
     ostr.open(hd->tGyrnm, ios::out);
     if( ostr.is_open() ) {
-        ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl;
+        ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl
+             << "Gxx Gyy Gzz" << std::endl;
         std::setprecision(4); std::fixed;
         for( int i=0; i<sp->N_CH; i++ ) {
             for( int j=0; j<sp->NBin; j++ ) {
@@ -1797,6 +1803,32 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
     else {
         hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->tGyrnm << std::endl;
         std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->tGyrnm << std::endl;
+        return false;
+    }
+}
+// write van-der-Waals energy
+bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->vdWnm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# van-der-Waals energy after " << step << " steps" << std::endl
+             << "# intra and inter chain energy" << std::endl;
+        for( int i=0; i<2*sp->N_CH; i++ ) {
+            ostr << "Chn" << i%sp->N_CH << " ";
+        } ostr << std::endl;
+        std::setprecision(4); std::fixed;
+        for( int i=0; i<sp->NBin; i++ ) {
+            for( int j=0; j<2*sp->N_CH; j++ ) {
+                ostr << (ot->vdWener[i*2*sp->N_CH + j])/(ot->H[i]) << " ";
+            } ostr << std::endl;
+        }
+        ostr.close();
+        return true;
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->vdWnm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->vdWnm << std::endl;
         return false;
     }
 }
@@ -3251,32 +3283,31 @@ int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin)
 
     for( int i=0; i< sp->N_CH; i++) {
         for( int j=0; j<sp->N_AA; j++ ) {
-            for( int k=0; k<4; k++ ) {
-                Box = Chn[i].AmAc[j].Bd[k].getBox();
-                centrBox[0] = Box % sp->NBOX;
-                centrBox[1] = (Box/sp->NBOX) % sp->NBOX;
-                centrBox[2] = Box/(double)(sp->NBOX*sp->NBOX);
-                for( int i=0; i<27; i++ ) {
-                    dbx = i%3; dby = (i/3)%3; dbz = i/9;
-                    neighBox[0] = (centrBox[0] + dbx-1 + sp->NBOX) % sp->NBOX;
-                    neighBox[1] = (centrBox[1] + dby-1 + sp->NBOX) % sp->NBOX;
-                    neighBox[2] = (centrBox[2] + dbz-1 + sp->NBOX) % sp->NBOX;
-                    searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
-                    neighBead = neighHead[searchBox];
-                    while(neighBead!=-1) {
-                        if( neighBead%4 == 3 ) {
-                            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[k], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
-                            dist2 = dotPro(distV, distV);
-                            // intra-chain SC contact
-                            if( neighBead >= i*sp->N_AA && neighBead < (i+1)*sp->N_AA ) {
-                                ot->vdWener[i][eBin] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
-                            }
-                            // inter-chain SC contact
-                            else {
-                                ot->vdWener[sp->N_CH + i][eBin] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
-                            }
+            Box = Chn[i].AmAc[j].Bd[3].getBox();
+            centrBox[0] = Box % sp->NBOX;
+            centrBox[1] = (Box/sp->NBOX) % sp->NBOX;
+            centrBox[2] = Box/(double)(sp->NBOX*sp->NBOX);
+            for( int m=0; m<27; m++ ) {
+                dbx = m%3; dby = (m/3)%3; dbz = m/9;
+                neighBox[0] = (centrBox[0] + dbx-1 + sp->NBOX) % sp->NBOX;
+                neighBox[1] = (centrBox[1] + dby-1 + sp->NBOX) % sp->NBOX;
+                neighBox[2] = (centrBox[2] + dbz-1 + sp->NBOX) % sp->NBOX;
+                searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
+                neighBead = neighHead[searchBox];
+                while(neighBead!=-1) {
+                    if( neighBead%4 == 3 ) {
+                        std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[3], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
+                        dist2 = dotPro(distV, distV);
+                        // intra-chain SC contact
+                        if( neighBead >= i*sp->N_AA && neighBead < (i+1)*sp->N_AA ) {
+                            ot->vdWener[eBin*2*sp->N_CH + i] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                        }
+                        // inter-chain SC contact
+                        else {
+                            ot->vdWener[eBin*2*sp->N_CH + sp->N_CH+i] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
                         }
                     }
+                    neighBead = neighList[neighBead];
                 }
             }
         }
@@ -3373,6 +3404,7 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
     for( int i=0; i<sp->N_CH; i++ ) {
         delete[] ot->tGyrEigCur[i]; }
     delete[] ot->tGyrEigCur;
+    delete[] ot->vdWener;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

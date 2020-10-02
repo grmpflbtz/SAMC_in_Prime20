@@ -64,6 +64,7 @@ struct Header {
     std::string hbmatr;     // output file name HB matrices
     std::string reenm;      // output file name end-to-end distance distribution
     std::string tGyrnm;     // output file name tensor of gyration
+    std::string vdWnm;      // output file name van-der-Waals energy
     std::string grdcnm;     // output file name ground state configuration
     std::string lognm;      // output file system log
 
@@ -79,7 +80,7 @@ struct Output {
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
-    double **vdWener;                // intra- and inter-chain van-der-Waals energy
+    double *vdWener;                // intra- and inter-chain van-der-Waals energy
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[5];  // # of attempted moves

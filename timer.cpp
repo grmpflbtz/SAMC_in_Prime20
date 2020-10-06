@@ -19,7 +19,7 @@ void Timer::PrintProgress( long curstep, long total ) {
     long min = sec/60;
     sec = sec%60;
 
-    std::cout << "\rstep " << std::fixed << std::setw(10) << curstep << "/" << total << " (" << std::setw(4) << std::right << std::setprecision(2) << done*100 << "%) - Remaining time: " << convertSecToString(remain) << std::flush;
+    std::cout << "\rstep " << std::fixed << std::setw(10) << curstep << "/" << total << " (" << std::setw(4) << std::right << std::setprecision(2) << done*100 << "%) | Remaining time: " << convertSecToString(remain) << std::flush;
 }
 
 void Timer::endProgram() {

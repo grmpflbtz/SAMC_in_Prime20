@@ -91,8 +91,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-//mt19937 rng(time(NULL));                // constructor for random number generator
-mt19937 rng(42);                        // debug
+mt19937 rng(time(NULL));                // constructor for random number generator
+//mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -141,7 +141,7 @@ bool resetBCcouter(SysPara *sp, Chain Chn[]);                                   
 
 int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate radius of gyration
 int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
-int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin);                   // calculate van-der-Waals energy
+int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin, double &vdW_intra, double &vdW_inter, int recalc);                   // calculate van-der-Waals energy
 
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
@@ -166,6 +166,7 @@ int main(int argc, char *argv[])
     std::ostringstream oss;
     string filename;
     double Eold, Enew, Egrd, deltaE;                        // energy values
+    double vdW_intra, vdW_inter;
     double dist[3];                                         // distance vector
     double distabs;                                         // absolute distance
     bool accept;                                            // acceptance value of move in SAMC
@@ -229,7 +230,7 @@ int main(int argc, char *argv[])
     }
     ot->tGyrEigCur = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
-    ot->vdWener = new double[sp->NBin * 2*sp->N_CH];
+    ot->vdWener = new double[sp->NBin * 2];
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -281,7 +282,7 @@ int main(int argc, char *argv[])
         }
     }
     if(sp->vdWener) {
-        for( int i=0; i<sp->NBin* 2*sp->N_CH; i++ ) {
+        for( int i=0; i<sp->NBin * 2; i++ ) {
             ot->vdWener[i] = 0;
         }
     }
@@ -854,7 +855,19 @@ int main(int argc, char *argv[])
                           << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
             }
             if(sp->vdWener){
-                calc_vanderWaals(sp, ot, Chn, eBin_o);
+                if( movetype==0 && jp!=3 && (step+it)!=0 ) { 
+                    calc_vanderWaals(sp, ot, Chn, eBin_o, vdW_intra, vdW_inter, 0); }
+                else {calc_vanderWaals(sp, ot, Chn, eBin_o, vdW_intra, vdW_inter, 1); }
+
+                /*output_vdW(sp, hd, ot, step+1);
+                std::cout << std::endl;
+                for( int m=0; m<sp->NBin; m++ ) {
+                    std::cout << m << " " << ot->H[m] << std::endl;
+                }
+                for( int m=0; m<sp->NBin; m++ ) {
+                    std::cout << m << " " << ot->vdWener[2*m] << " " << ot->vdWener[2*m+1] << std::endl;
+                }*/
+
             }
             if( Eold < Egrd ) {
                 Egrd = Eold;
@@ -865,12 +878,12 @@ int main(int argc, char *argv[])
             gammasum += gamma;
 
             //check histogram anomalies
-            for( int i=0; i<sp->NBin; i++ ) {
+            /*for( int i=0; i<sp->NBin; i++ ) {
                 if( ot->H[i] > sp->stepit*sp->T_MAX) {
                     std::cout << std::endl << "What the actual fuck is happening in here?" << std::endl;
                     std::cout << "Eierkucheeeeeeeen" << std::endl;
                 }
-            }
+            }*/
 
         }   // end of one MC step
 
@@ -1789,11 +1802,10 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
     if( ostr.is_open() ) {
         ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl
              << "Gxx Gyy Gzz" << std::endl;
-        std::setprecision(4); std::fixed;
         for( int i=0; i<sp->N_CH; i++ ) {
             for( int j=0; j<sp->NBin; j++ ) {
                 for( int k=0; k<3; k++ ) {
-                    ostr << (ot->tGyrEig[i][j][k])/(ot->H[j]) << " ";
+                    ostr << std::setprecision(4) << std::fixed << (ot->tGyrEig[i][j][k])/(ot->H[j]) << " ";
                 }   ostr << std::endl;
             }
         }
@@ -1814,13 +1826,13 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
     if( ostr.is_open() ) {
         ostr << "# van-der-Waals energy after " << step << " steps" << std::endl
              << "# intra and inter chain energy" << std::endl;
-        for( int i=0; i<2*sp->N_CH; i++ ) {
+        /*for( int i=0; i<2*sp->N_CH; i++ ) {
             ostr << "Chn" << i%sp->N_CH << " ";
         } ostr << std::endl;
-        std::setprecision(4); std::fixed;
+        std::setprecision(4); std::fixed;*/
         for( int i=0; i<sp->NBin; i++ ) {
-            for( int j=0; j<2*sp->N_CH; j++ ) {
-                ostr << (ot->vdWener[i*2*sp->N_CH + j])/(ot->H[i]) << " ";
+            for( int j=0; j<2; j++ ) {
+                ostr << std::setprecision(4) << std::fixed << (ot->vdWener[i*2 + j])/(2*ot->H[i]) << " ";
             } ostr << std::endl;
         }
         ostr.close();
@@ -3273,7 +3285,7 @@ int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
     return 0;
 }
 // calculate van-der-Waals energy
-int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin)
+int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin, double &vdW_intra, double &vdW_inter, int recalc)
 {
     int neighBox[3], centrBox[3];
     int searchBox, neighBead;
@@ -3281,37 +3293,45 @@ int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin)
     double distV[3];
     double dist2;
 
-    for( int i=0; i< sp->N_CH; i++) {
-        for( int j=0; j<sp->N_AA; j++ ) {
-            Box = Chn[i].AmAc[j].Bd[3].getBox();
-            centrBox[0] = Box % sp->NBOX;
-            centrBox[1] = (Box/sp->NBOX) % sp->NBOX;
-            centrBox[2] = Box/(double)(sp->NBOX*sp->NBOX);
-            for( int m=0; m<27; m++ ) {
-                dbx = m%3; dby = (m/3)%3; dbz = m/9;
-                neighBox[0] = (centrBox[0] + dbx-1 + sp->NBOX) % sp->NBOX;
-                neighBox[1] = (centrBox[1] + dby-1 + sp->NBOX) % sp->NBOX;
-                neighBox[2] = (centrBox[2] + dbz-1 + sp->NBOX) % sp->NBOX;
-                searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
-                neighBead = neighHead[searchBox];
-                while(neighBead!=-1) {
-                    if( neighBead%4 == 3 ) {
-                        std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[3], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
-                        dist2 = dotPro(distV, distV);
-                        // intra-chain SC contact
-                        if( neighBead >= i*sp->N_AA && neighBead < (i+1)*sp->N_AA ) {
-                            ot->vdWener[eBin*2*sp->N_CH + i] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+    if(recalc == 1) {
+        vdW_intra = 0;
+        vdW_inter = 0;
+        for( int i=0; i< sp->N_CH; i++) {
+            for( int j=0; j<sp->N_AA; j++ ) {
+                Box = Chn[i].AmAc[j].Bd[3].getBox();
+                centrBox[0] = Box % sp->NBOX;
+                centrBox[1] = (Box/sp->NBOX) % sp->NBOX;
+                centrBox[2] = Box/(double)(sp->NBOX*sp->NBOX);
+                for( int m=0; m<27; m++ ) {
+                    dbx = m%3; dby = (m/3)%3; dbz = m/9;
+                    neighBox[0] = (centrBox[0] + dbx-1 + sp->NBOX) % sp->NBOX;
+                    neighBox[1] = (centrBox[1] + dby-1 + sp->NBOX) % sp->NBOX;
+                    neighBox[2] = (centrBox[2] + dbz-1 + sp->NBOX) % sp->NBOX;
+                    searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
+                    neighBead = neighHead[searchBox];
+                    while(neighBead!=-1) {
+                        if( neighBead%4 == 3 ) {
+                            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[3], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
+                            dist2 = dotPro(distV, distV);
+                            // intra-chain SC contact
+                            if( neighBead >= i*sp->N_AA*4 && neighBead < (i+1)*sp->N_AA*4 ) {
+                                vdW_intra += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                            }
+                            // inter-chain SC contact
+                            else {
+                                vdW_inter += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                            }
                         }
-                        // inter-chain SC contact
-                        else {
-                            ot->vdWener[eBin*2*sp->N_CH + sp->N_CH+i] += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
-                        }
+                        neighBead = neighList[neighBead];
                     }
-                    neighBead = neighList[neighBead];
                 }
             }
         }
     }
+
+    ot->vdWener[eBin*2 + 0] += vdW_intra;
+    ot->vdWener[eBin*2 + 1] += vdW_inter;
+
     return 0;
 }
 

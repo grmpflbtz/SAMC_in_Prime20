@@ -118,6 +118,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
 
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
+bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
@@ -824,7 +825,7 @@ int main(int argc, char *argv[])
             if(sp->Ree) {
                 for( int i=0; i<sp->N_CH; i++ ) {
                     std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i].AmAc[0].Bd[0], Chn[i].AmAc[sp->N_AA-1].Bd[3]);
-                    ot->Ree2[i*sp->NBin + eBin_o] += dotPro(dist, dist);
+                    ot->Ree2[sp->N_CH*eBin_o + i] += dotPro(dist, dist);
                 }
             }
             if(sp->wConfig) {
@@ -920,19 +921,7 @@ int main(int argc, char *argv[])
                 }
             }
             if(sp->Ree) {
-                backup.open(hd->reenm, ios::out);
-                if( backup.is_open() ) {
-                    backup << "# Squared end-to-end distance distribution after " << step+1 << " steps" << std::endl;
-                    std::setprecision(3); std::fixed;
-                    for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
-                        backup << ot->Ree2[i]/(double)ot->H[i%sp->NBin] << std::endl;
-                    }
-                    backup.close();
-                }
-                else {
-                    hd->os_log<< std::endl << "error opening " << hd->reenm << std::endl;
-                    std::cout << std::endl << "error opening " << hd->reenm << std::endl;
-                }
+                output_Ree(sp, hd, ot, step+1);
             }
             if(sp->tGyr) {
                 output_tGyr(sp, hd, ot, step+1);
@@ -1794,6 +1783,27 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
         return false;
     }
 }
+// write end-to-end-distance
+bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->reenm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# Squared end-to-end distances after " << step << " steps" << std::endl;
+        ostr << "bin H";
+        for( int i=0; i<sp->N_CH; i++ ) { ostr << " chn" << i; } ostr << std::endl;
+        for( int i=0; i<sp->NBin; i++ ) {
+            ostr << i << " " << ot->H[i];
+            for( int j=0; j<sp->N_CH; j++ ) { ostr << " " << std::setprecision(4) << std::fixed << ot->Ree2[2*i + j]/(double)ot->H[i]; }
+            ostr << std::endl;
+        }
+        ostr.close();
+    }
+    else {
+        hd->os_log<< std::endl << "error opening " << hd->reenm << std::endl;
+        std::cout << std::endl << "error opening " << hd->reenm << std::endl;
+    }
+}
 // write tensor of gyration
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
 {
@@ -1801,11 +1811,13 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
     ostr.open(hd->tGyrnm, ios::out);
     if( ostr.is_open() ) {
         ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl
-             << "Gxx Gyy Gzz" << std::endl;
+             << "bin H Gxx Gyy Gzz" << std::endl;
         for( int i=0; i<sp->N_CH; i++ ) {
+            ostr << "chn" << i << std::endl;
             for( int j=0; j<sp->NBin; j++ ) {
+                ostr << j << " " << ot->H[j];
                 for( int k=0; k<3; k++ ) {
-                    ostr << std::setprecision(4) << std::fixed << (ot->tGyrEig[i][j][k])/(ot->H[j]) << " ";
+                    ostr << " " << std::setprecision(4) << std::fixed << (ot->tGyrEig[i][j][k])/(ot->H[j]);
                 }   ostr << std::endl;
             }
         }
@@ -1825,14 +1837,15 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
     ostr.open(hd->vdWnm, ios::out);
     if( ostr.is_open() ) {
         ostr << "# van-der-Waals energy after " << step << " steps" << std::endl
-             << "# intra and inter chain energy" << std::endl;
+             << "bin H intra inter" << std::endl;
         /*for( int i=0; i<2*sp->N_CH; i++ ) {
             ostr << "Chn" << i%sp->N_CH << " ";
         } ostr << std::endl;
         std::setprecision(4); std::fixed;*/
         for( int i=0; i<sp->NBin; i++ ) {
+            ostr << i << " " << ot->H[i];
             for( int j=0; j<2; j++ ) {
-                ostr << std::setprecision(4) << std::fixed << (ot->vdWener[i*2 + j])/(2*ot->H[i]) << " ";
+                ostr << " " << std::setprecision(4) << std::fixed << (ot->vdWener[i*2 + j])/(2*ot->H[i]);
             } ostr << std::endl;
         }
         ostr.close();

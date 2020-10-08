@@ -118,6 +118,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
 
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
+bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step);                       // write hydrogen bond matrix
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
@@ -901,24 +902,7 @@ int main(int argc, char *argv[])
                 BackupProdRun(sp, hd, ot, Timer, step);
             }
             if(sp->HB_ContMat) {
-                backup.open(hd->hbmatr, ios::out);
-                if(backup.is_open() ) {
-                    backup << "# Hydrogen Bind contact matrices after " << step+1 << " steps" << std::endl;
-                    std::setprecision(3); std::fixed;
-                    for( int i=0; i<sp->NBin; i++ ) {
-                        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
-                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                                backup << ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/ot->H[i] << " ";
-                            }
-                            backup << std::endl;
-                        }
-                    }
-                    backup.close();
-                }
-                else {
-                    hd->os_log<< std::endl << "error opening " << hd->hbmatr << std::endl;
-                    std::cout << std::endl << "error opening " << hd->hbmatr << std::endl;
-                }
+                output_HBmat(sp, hd, ot, step+1);
             }
             if(sp->Ree) {
                 output_Ree(sp, hd, ot, step+1);
@@ -1783,6 +1767,31 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
         return false;
     }
 }
+// write hydrogen bond matrix
+bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->hbmatr, ios::out);
+    if(ostr.is_open() ) {
+        ostr << "# Hydrogen Bind contact matrices after " << step+1 << " steps" << std::endl;
+        std::setprecision(3); std::fixed;
+        for( int i=0; i<sp->NBin; i++ ) {
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    ostr << ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/ot->H[i] << " ";
+                }
+                ostr << std::endl;
+            }
+        }
+        ostr.close();
+        return true;
+    }
+    else {
+        hd->os_log<< std::endl << "error opening " << hd->hbmatr << std::endl;
+        std::cout << std::endl << "error opening " << hd->hbmatr << std::endl;
+        return false;
+    }
+}
 // write end-to-end-distance
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step)
 {
@@ -1798,10 +1807,12 @@ bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step)
             ostr << std::endl;
         }
         ostr.close();
+        return true;
     }
     else {
         hd->os_log<< std::endl << "error opening " << hd->reenm << std::endl;
         std::cout << std::endl << "error opening " << hd->reenm << std::endl;
+        return false;
     }
 }
 // write tensor of gyration

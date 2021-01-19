@@ -92,7 +92,7 @@ const double SWDepth(AmiAc AmAci, AmiAc AmAcj);
 const double DiaSC(AmiAc AmAci, AmiAc AmAcj);
 
 /* squared bead pair HC diameters, including reduced diameters for neighbouring residues
- * comparing chn[ia].Bd[ja] with chn[ib].Bd[jb]
+ * comparing chn[ha].AmiAc[ia].Bd[ja] with chn[hb].AmiAc[ib].Bd[jb]
  */
 double DiaSQ(Chain chn[], int ha, int ia, int ja, int hb, int ib, int jb);
 

@@ -40,7 +40,7 @@ const double DIA2_HB_CCa = 23.6196;
 const double DIA2_HB_CC = 23.3289;
 //Backbone bead square well diameters
 const double SW_BB = 4.5;			// Backbone SW diameter (N and C)
-const double SW2_BB = 17.64;	    // Squared backbone SW diameter (N and C)
+const double SW2_BB = 20.25;	    // Squared backbone SW diameter (N and C)
 const double SW_HUGE = 7.4;         // Largest possible SW diameter
 const double SW2HUGE = 54.76;		// Largest possible squared SW diameter
 //Square-well parameter values (19 parameter set used. Some values are equal)

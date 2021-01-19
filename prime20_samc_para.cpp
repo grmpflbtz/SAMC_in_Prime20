@@ -744,7 +744,7 @@ const double DiaSC(AmiAc AmAci, AmiAc AmAcj)
 	}
 }
 /* squared bead pair HC diameters, including reduced diameters for neighbouring residues
- * comparing chn[ia].Bd[ja] with chn[ib].Bd[jb]
+ * comparing chn[ha].AmiAc[ia].Bd[ja] with chn[hb].AmiAc[ib].Bd[jb]
  */
 double DiaSQ(Chain chn[], int ha, int ia, int ja, int hb, int ib, int jb)
 {
@@ -757,36 +757,36 @@ double DiaSQ(Chain chn[], int ha, int ia, int ja, int hb, int ib, int jb)
 	// neighbouring residues => with SQZ, (pseudo-)bonded beads are given diameter 0.
 	if(ha==hb) {
         if(ia == ib) return 0;
-	    if( (ha!=hb) || ((ha==hb) && (abs(ia-ib) == 1)) ) {
+	    if( abs(ia-ib) == 1 ) {
             h1 = (ia<ib) ? ha:hb;   h2 = (ia<ib) ? hb:ha;
 	    	i1 = (ia<ib) ? ia:ib;	i2 = (ia<ib) ? ib:ia;
 	    	j1 = (ia<ib) ? ja:jb;   j2 = (ia<ib) ? jb:ja;
             if(squeeze) {
 	    	    switch (j1) {
-                    case 0: switch(j2) {
+                    case 0: switch(j2) {	// N
                         case 0: return SQZ4 * SQZ4;
                         case 1: return SQZ2 * SQZ2;
                         case 2: d1 = DIA_N + DIA_C; return 0.25*d1*d1;
                         case 3: if(chn[h2].AmAc[i2].getAAnum() == 0) return 0;
                                 d1 = DIA_N + DiaSC(chn[h2].AmAc[i2], chn[h2].AmAc[i2]); return 0.25*d1*d1;
                     }
-                    case 1: switch(j2) {
+                    case 1: switch(j2) {	// Ca
                         case 0: return 0;
                         case 1: return 0;
                         case 2: return SQZ1 * SQZ1;
                         case 3: if(chn[h2].AmAc[i2].getAAnum() == 0) return 0;
-                                return chn[h2].AmAc[i2].getSQZ(6) * chn[h2].AmAc[i2].getSQZ(6);
+                                return chn[h2].AmAc[i2].getSQZ(9) * chn[h2].AmAc[i2].getSQZ(9);
                     }
-                    case 2: switch(j2) {
+                    case 2: switch(j2) {	// C
                         case 0: return 0;
                         case 1: return 0;
                         case 2: return SQZ5 * SQZ5;
                         case 3: if(chn[h2].AmAc[i2].getAAnum() == 0) return 0;
-                                return chn[h2].AmAc[i2].getSQZ(7) * chn[h2].AmAc[i2].getSQZ(7);
+                                return chn[h2].AmAc[i2].getSQZ(6) * chn[h2].AmAc[i2].getSQZ(6);
                     }
-                    case 3: switch(j2) {
-                        case 0: return chn[h1].AmAc[i1].getSQZ(8) * chn[h1].AmAc[i1].getSQZ(8);
-                        case 1: return chn[h1].AmAc[i1].getSQZ(9) * chn[h1].AmAc[i1].getSQZ(9);
+                    case 3: switch(j2) {	// R
+                        case 0: return chn[h1].AmAc[i1].getSQZ(7) * chn[h1].AmAc[i1].getSQZ(7);
+                        case 1: return chn[h1].AmAc[i1].getSQZ(8) * chn[h1].AmAc[i1].getSQZ(8);
                         case 2: d1 = DiaSC(chn[h1].AmAc[i1], chn[h1].AmAc[i1]) + DIA_C; return 0.25*d1*d1;
                         case 3: return DiaSC(chn[h1].AmAc[i1], chn[h2].AmAc[i2]) * DiaSC(chn[h1].AmAc[i1], chn[h2].AmAc[i2]);
                     }

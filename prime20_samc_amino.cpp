@@ -63,10 +63,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 2.560;
 			ANGL_RCaN = 1.911;
 			ANGL_RCaC = 1.934;
-			SQZ6 = 4.598;
-			SQZ7 = 3.312;
-			SQZ8 = 3.000;
-			SQZ9 = 4.353;
+			SQZ6 = 3.312;
+			SQZ7 = 3.000;
+			SQZ8 = 4.353;
+			SQZ9 = 4.598;
 			SQZ10= 4.997;
 			break;
 		case 2: 
@@ -75,10 +75,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 2.959;
 			ANGL_RCaN = 1.841;
 			ANGL_RCaC = 1.991;
-			SQZ6 = 4.754;
-			SQZ7 = 3.570;
-			SQZ8 = 3.378;
-			SQZ9 = 4.635;
+			SQZ6 = 3.570;
+			SQZ7 = 3.378;
+			SQZ8 = 4.635;
+			SQZ9 = 4.754;
 			SQZ10= 5.002;
 			break;
 		case 3: 
@@ -87,10 +87,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 2.995;
 			ANGL_RCaN = 1.127;
 			ANGL_RCaC = 2.108;
-			SQZ6 = 3.884;
-			SQZ7 = 3.133;
-			SQZ8 = 3.298;
-			SQZ9 = 4.665;
+			SQZ6 = 3.133;
+			SQZ7 = 3.298;
+			SQZ8 = 4.665;
+			SQZ9 = 3.884;
 			SQZ10= 4.773;
 			break;
 		case 4: 
@@ -99,10 +99,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 2.900;
 			ANGL_RCaN = 1.739;
 			ANGL_RCaC = 1.948;
-			SQZ6 = 4.617;
-			SQZ7 = 3.447;
-			SQZ8 = 3.290;
-			SQZ9 = 4.573;
+			SQZ6 = 3.447;
+			SQZ7 = 3.290;
+			SQZ8 = 4.573;
+			SQZ9 = 4.617;
 			SQZ10= 5.007;
 			break;
 		case 5: 
@@ -111,10 +111,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 2.800;
 			ANGL_RCaN = 1.749;
 			ANGL_RCaC = 1.859;
-			SQZ6 = 4.507;
-			SQZ7 = 3.331;
-			SQZ8 = 3.128;
-			SQZ9 = 4.380;
+			SQZ6 = 3.331;
+			SQZ7 = 3.128;
+			SQZ8 = 4.380;
+			SQZ9 = 4.507;
 			SQZ10= 4.944;
 			break;
 		case 6: 
@@ -123,10 +123,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.350;
 			ANGL_RCaN = 1.690;
 			ANGL_RCaC = 1.927;
-			SQZ6 = 4.633;
-			SQZ7 = 3.607;
-			SQZ8 = 3.565;
-			SQZ9 = 4.680;
+			SQZ6 = 3.607;
+			SQZ7 = 3.565;
+			SQZ8 = 4.680;
+			SQZ9 = 4.633;
 			SQZ10= 4.791;
 			break;
 		case 7: 
@@ -135,10 +135,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.250;
 			ANGL_RCaN = 1.740;
 			ANGL_RCaC = 1.843;
-			SQZ6 = 4.785;
-			SQZ7 = 3.751;
-			SQZ8 = 3.435;
-			SQZ9 = 4.558;
+			SQZ6 = 3.751;
+			SQZ7 = 3.435;
+			SQZ8 = 4.558;
+			SQZ9 = 4.785;
 			SQZ10= 4.860;
 			break;
 		case 8: 
@@ -147,10 +147,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.800;
 			ANGL_RCaN = 1.610;
 			ANGL_RCaC = 1.819;
-			SQZ6 = 5.703;
-			SQZ7 = 4.827;
-			SQZ8 = 4.651;
-			SQZ9 = 5.535;
+			SQZ6 = 4.827;
+			SQZ7 = 4.651;
+			SQZ8 = 5.535;
+			SQZ9 = 5.703;
 			SQZ10= 4.978;
 			break;
 		case 9: 
@@ -159,10 +159,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.250;
 			ANGL_RCaN = 1.732;
 			ANGL_RCaC = 1.873;
-			SQZ6 = 5.323;
-			SQZ7 = 4.384;
-			SQZ8 = 4.191;
-			SQZ9 = 5.163;
+			SQZ6 = 4.384;
+			SQZ7 = 4.191;
+			SQZ8 = 5.163;
+			SQZ9 = 5.323;
 			SQZ10= 4.974;
 			break;
 		case 10: 
@@ -171,10 +171,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.930;
 			ANGL_RCaN = 1.792;
 			ANGL_RCaC = 1.894;
-			SQZ6 = 5.162;
-			SQZ7 = 4.175;
-			SQZ8 = 3.997;
-			SQZ9 = 5.074;
+			SQZ6 = 4.175;
+			SQZ7 = 3.997;
+			SQZ8 = 5.074;
+			SQZ9 = 5.162;
 			SQZ10= 4.996;
 			break;
 		case 11: 
@@ -183,10 +183,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.000;
 			ANGL_RCaN = 1.679;
 			ANGL_RCaC = 1.859;
-			SQZ6 = 5.134;
-			SQZ7 = 4.139;
-			SQZ8 = 3.996;
-			SQZ9 = 5.062;
+			SQZ6 = 4.139;
+			SQZ7 = 3.996;
+			SQZ8 = 5.062;
+			SQZ9 = 5.134;
 			SQZ10= 5.000;
 			break;
 		case 12: 
@@ -195,10 +195,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.500;
 			ANGL_RCaN = 1.808;
 			ANGL_RCaC = 1.970;
-			SQZ6 = 4.936;
-			SQZ7 = 3.918;
-			SQZ8 = 3.724;
-			SQZ9 = 4.863;
+			SQZ6 = 3.918;
+			SQZ7 = 3.724;
+			SQZ8 = 4.863;
+			SQZ9 = 4.936;
 			SQZ10= 5.001;
 			break;
 		case 13: 
@@ -207,9 +207,9 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.300;
 			ANGL_RCaN = 1.773;
 			ANGL_RCaC = 1.976;
-			SQZ6 = 4.867;
-			SQZ7 = 3.740;
-			SQZ8 = 3.626;
+			SQZ6 = 3.740;
+			SQZ7 = 3.626;
+			SQZ8 = 4.867;
 			SQZ9 = 4.867;
 			SQZ10= 4.994;
 			break;
@@ -219,10 +219,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.050;
 			ANGL_RCaN = 1.517;
 			ANGL_RCaC = 1.805;
-			SQZ6 = 4.780;
-			SQZ7 = 3.991;
-			SQZ8 = 3.973;
-			SQZ9 = 4.827;
+			SQZ6 = 3.991;
+			SQZ7 = 3.973;
+			SQZ8 = 4.827;
+			SQZ9 = 4.780;
 			SQZ10= 5.040;
 			break;
 		case 15: 
@@ -231,10 +231,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.300;
 			ANGL_RCaN = 1.526;
 			ANGL_RCaC = 1.695;
-			SQZ6 = 4.898;
-			SQZ7 = 4.208;
-			SQZ8 = 4.246;
-			SQZ9 = 4.978;
+			SQZ6 = 4.208;
+			SQZ7 = 4.246;
+			SQZ8 = 4.978;
+			SQZ9 = 4.898;
 			SQZ10= 5.042;
 			break;
 		case 16: 
@@ -243,10 +243,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.350;
 			ANGL_RCaN = 1.537;
 			ANGL_RCaC = 1.706;
-			SQZ6 = 5.180;
-			SQZ7 = 4.460;
-			SQZ8 = 4.187;
-			SQZ9 = 4.963;
+			SQZ6 = 4.460;
+			SQZ7 = 4.187;
+			SQZ8 = 4.963;
+			SQZ9 = 5.180;
 			SQZ10= 4.986;
 			break;
 		case 17: 
@@ -255,10 +255,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 4.050;
 			ANGL_RCaN = 1.646;
 			ANGL_RCaC = 1.824;
-			SQZ6 = 5.206;
-			SQZ7 = 4.205;
-			SQZ8 = 4.032;
-			SQZ9 = 5.067;
+			SQZ6 = 4.205;
+			SQZ7 = 4.032;
+			SQZ8 = 5.067;
+			SQZ9 = 5.206;
 			SQZ10= 5.017;
 			break;
 		case 18: 
@@ -267,10 +267,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.100;
 			ANGL_RCaN = 1.598;
 			ANGL_RCaC = 1.829;
-			SQZ6 = 4.560;
-			SQZ7 = 3.516;
-			SQZ8 = 3.350;
-			SQZ9 = 4.501;
+			SQZ6 = 3.516;
+			SQZ7 = 3.350;
+			SQZ8 = 4.501;
+			SQZ9 = 4.560;
 			SQZ10= 4.913;
 			break;
 		case 19: 
@@ -279,10 +279,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = 3.830;
 			ANGL_RCaN = 1.548;
 			ANGL_RCaC = 1.826;
-			SQZ6 = 4.766;
-			SQZ7 = 3.886;
-			SQZ8 = 3.838;
-			SQZ9 = 4.790;
+			SQZ6 = 3.886;
+			SQZ7 = 3.838;
+			SQZ8 = 4.790;
+			SQZ9 = 4.766;
 			SQZ10= 4.945;
 			break;
 	}

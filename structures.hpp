@@ -34,18 +34,22 @@ struct SysPara {
     int WT_PHI;             // weight rotPhi
     int WT_PSI;             // weight rotPsi
     int WT_TRANS;           // weight translation
+    int WT_ROT;             // weight rotation 
     int WT_ROSENC;
     int WT_ROSENN;
     // movement restraints
-    double DISP_MAX;
-    double DPHI_MAX;
-    double DPSI_MAX;
+    double DISP_MAX;        // maximum local displacement
+    double DPHI_MAX;        // maximum angle phi rotation
+    double DPSI_MAX;        // maximum angle psi rotation
+    double DTRN_MAX;        // maximum chain translation
+    double DROT_MAX;        // maximum angle chain rotation
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
     bool HB_ContMat;        // Hydrogen bond contact matrices
     bool Ree;               // end-to-end distance distribution
     bool tGyr;              // tensor of gyration
+    bool vdWener;           // van-der-Waals energy
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         std::vector<double> ConfigE;
         double ConfigV;
@@ -60,6 +64,7 @@ struct Header {
     std::string hbmatr;     // output file name HB matrices
     std::string reenm;      // output file name end-to-end distance distribution
     std::string tGyrnm;     // output file name tensor of gyration
+    std::string vdWnm;      // output file name van-der-Waals energy
     std::string grdcnm;     // output file name ground state configuration
     std::string lognm;      // output file system log
 
@@ -75,10 +80,11 @@ struct Output {
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
+    double *vdWener;                // intra- and inter-chain van-der-Waals energy
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
-    long unsigned int nattempt[4];  // # of attempted moves
-    long unsigned int naccept[4];   // # of accepted moves
+    long unsigned int nattempt[5];  // # of attempted moves
+    long unsigned int naccept[5];   // # of accepted moves
 };
 
 

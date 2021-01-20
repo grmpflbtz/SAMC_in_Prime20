@@ -45,6 +45,9 @@
  *              squeeze parameters. New chain creation function necessary (legacy version 20200205)
  * 2020-02-14   introduce production (approximate lng) and measure run (fixed lng - measure geometric observables). (legacy version 20200214)
  * 2020-08-04   changed nstep to number of beads in system
+ * 
+ * MOVED TO GITHUB DOCUMENTATION
+ * 
  */
 /* abbreviations:
  * SC   - side chain
@@ -853,39 +856,18 @@ int main(int argc, char *argv[])
                         hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
                     }
                 }
-                /*std::cout << std::endl << "Chn[0]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[0] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[0][0]+ot->tGyrEigCur[0][1]+ot->tGyrEigCur[0][2]
-                          << std::endl << "Chn[1]:  eBin_o=" << eBin_o << "  rGyrCur=" << ot->rGyrCur[1] << "  from tGyr: rGyrCur=" << ot->tGyrEigCur[1][0]+ot->tGyrEigCur[1][1]+ot->tGyrEigCur[1][2] << std::endl;*/
             }
             if(sp->vdWener){
                 if( movetype==0 && jp!=3 && (step+it)!=0 ) { 
                     calc_vanderWaals(sp, ot, Chn, eBin_o, vdW_intra, vdW_inter, 0); }
                 else {calc_vanderWaals(sp, ot, Chn, eBin_o, vdW_intra, vdW_inter, 1); }
-
-                /*output_vdW(sp, hd, ot, step+1);
-                std::cout << std::endl;
-                for( int m=0; m<sp->NBin; m++ ) {
-                    std::cout << m << " " << ot->H[m] << std::endl;
-                }
-                for( int m=0; m<sp->NBin; m++ ) {
-                    std::cout << m << " " << ot->vdWener[2*m] << " " << ot->vdWener[2*m+1] << std::endl;
-                }*/
-
             }
             if( Eold < Egrd ) {
                 Egrd = Eold;
                 outputPositions(sp, hd, hd->grdcnm, Chn, 0, Eold);
             }
-            
 
             gammasum += gamma;
-
-            //check histogram anomalies
-            /*for( int i=0; i<sp->NBin; i++ ) {
-                if( ot->H[i] > sp->stepit*sp->T_MAX) {
-                    std::cout << std::endl << "What the actual fuck is happening in here?" << std::endl;
-                    std::cout << "Eierkucheeeeeeeen" << std::endl;
-                }
-            }*/
 
         }   // end of one MC step
 
@@ -914,15 +896,6 @@ int main(int argc, char *argv[])
                 output_vdW(sp, hd, ot, step+1);
             }
         }
-
-        // check bond length after every move - if this fails: abort run
-        /*if( !checkBndLngth(Chn, 0, N_CH*N_AA) ) {
-            std::cerr << endl << "bond length error" << endl;
-            std::cerr << "Energy = " << Eold << endl;
-            outputPositions(Chn, "AnorLondo.xyz", 1);
-            this_thread::sleep_for(chrono::milliseconds(200));
-            return 0;
-        }*/
 
         // Energy check
         if( (step+1)%10000 == 0 ) {

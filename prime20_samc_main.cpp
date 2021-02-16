@@ -94,8 +94,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-mt19937 rng(time(NULL));                // constructor for random number generator
-//mt19937 rng(42);                        // debug
+//mt19937 rng(time(NULL));                // constructor for random number generator
+mt19937 rng(42);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -3307,16 +3307,18 @@ int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin, double &vdW
                     searchBox = neighBox[0] + neighBox[1]*sp->NBOX + neighBox[2]*sp->NBOX*sp->NBOX;
                     neighBead = neighHead[searchBox];
                     while(neighBead!=-1) {
-                        if( neighBead%4 == 3 ) {
-                            std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[3], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
-                            dist2 = dotPro(distV, distV);
-                            // intra-chain SC contact
-                            if( neighBead >= i*sp->N_AA*4 && neighBead < (i+1)*sp->N_AA*4 ) {
-                                vdW_intra += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
-                            }
-                            // inter-chain SC contact
-                            else {
-                                vdW_inter += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                        if( ( (i*sp->N_AA+j)*4 ) < neighBead ) {
+                            if( neighBead%4 == 3 ) {
+                                std::tie(distV[0], distV[1], distV[2]) = distVecBC(sp, Chn[i].AmAc[j].Bd[3], Chn[neighBead/(4*sp->N_AA)].AmAc[(neighBead/4)%sp->N_AA].Bd[neighBead%4]);
+                                dist2 = dotPro(distV, distV);
+                                // intra-chain SC contact
+                                if( neighBead >= i*sp->N_AA*4 && neighBead < (i+1)*sp->N_AA*4 ) {
+                                    vdW_intra += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                                }
+                                // inter-chain SC contact
+                                else {
+                                    vdW_inter += E_single(Chn, i, j, neighBead/(4*sp->N_AA), (neighBead/4)%sp->N_AA, dist2);
+                                }
                             }
                         }
                         neighBead = neighList[neighBead];

@@ -94,8 +94,8 @@ int **HBLcpy;
 double **NCDist;
 double **NCDcpy;
 
-//mt19937 rng(time(NULL));                // constructor for random number generator
-mt19937 rng(42);                        // debug
+mt19937 rng(time(NULL));                // constructor for random number generator
+//mt19937 rng(44);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -604,7 +604,7 @@ int main(int argc, char *argv[])
             if( accept ) {      // legal move → check energy window and acceptance criterion
                 Enew = Eold + deltaE;
                 // check if Enew is in energy window → if not: don't count attempt
-                if( Enew<sp->EMin || Enew > sp->EMax ) {
+                if( Enew<sp->EMin || Enew > sp->EMax+0.00001 ) {
                     switch( movetype ) {
                         case 0:     // wiggle
                             Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp] = BdCpy[4*ip+jp];                     // reset to old coordinates

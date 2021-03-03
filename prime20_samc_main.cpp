@@ -351,6 +351,12 @@ int main(int argc, char *argv[])
             }
         }
         Eold += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
+        // overlapp check
+        for( int j=0; j<4; j++ ) {
+            if( EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0) < 0.0 ) {
+                std::cout << "--- ERROR ---\toverlapp in configuration detected" << std::endl;
+            }
+        }
     }
 
     // position check file output

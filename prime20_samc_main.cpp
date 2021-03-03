@@ -125,6 +125,7 @@ bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step);               
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
+bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
@@ -236,6 +237,7 @@ int main(int argc, char *argv[])
     ot->tGyrEigCur = new double*[sp->N_CH];
     for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
     ot->vdWener = new double[sp->NBin * 2];
+    ot->Et = new double[sp->T_WRITE];
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -290,6 +292,9 @@ int main(int argc, char *argv[])
         for( int i=0; i<sp->NBin * 2; i++ ) {
             ot->vdWener[i] = 0;
         }
+    }
+    if(sp->Et) {
+        output_Et(sp, hd, ot, 0, 0);
     }
     if(sp->wConfig) {
         for( int i=0; i<sp->ConfigE.size(); i++ ) {
@@ -882,6 +887,11 @@ int main(int argc, char *argv[])
             gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
         }
 
+        //  energy time development observable
+        if(sp->Et) {
+            ot->Et[step%sp->T_WRITE] = Eold;
+        }
+
         // write Backup-File
         if( (step+1)%sp->T_WRITE == 0 ) {
             if(!sp->FIX_lngE) {
@@ -900,6 +910,9 @@ int main(int argc, char *argv[])
             }
             if(sp->vdWener) {
                 output_vdW(sp, hd, ot, step+1);
+            }
+            if(sp->Et) {
+                output_Et(sp, hd, ot, step+1, 1);
             }
         }
 
@@ -1079,6 +1092,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->tGyrnm = "tGyr.dat";
     hd->vdWnm  = "vdWE.dat";
     hd->grdcnm = "grdConfig.xyz";
+    hd->enertm = "Et.dat";
     hd->lognm  = "out.log";
 
     //reading arguments
@@ -1289,6 +1303,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_Ree = 0;
     int read_tGyr= 0;
     int read_vdWe= 0;
+    int read_Et  = 0;
     int read_WCon= 0;
     int read_ConE= 0;
     int read_ConV= 0;
@@ -1377,6 +1392,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("vdWener")==0 ) {
                     if( value.compare("true")==0 ) {sp->vdWener = true; read_vdWe = 1; }
                     else if( value.compare("false")==0 ) { sp->vdWener = false; read_vdWe = 1; } }
+                else if( option.compare("ener_t")==0 ) {
+                    if( value.compare("true")==0 ) {sp->Et = true; read_Et = 1; }
+                    else if( value.compare("false")==0 ) { sp->Et = false; read_Et = 1; } }
                 else if( option.compare("wConfig")==0 ) {
                     if( value.compare("true")==0 ) { 
                         sp->wConfig = true;    read_WCon = 1;
@@ -1503,6 +1521,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_vdWe == 0 ){ read_all = false;
             std::cout  << "Warning! vdWener not read. " << std::endl; 
             hd->os_log << "Warning! vdWener not read. " << std::endl;}
+        if( read_Et == 0 ){ read_all = false;
+            std::cout  << "Warning! Et not read. " << std::endl; 
+            hd->os_log << "Warning! Et not read. " << std::endl;}
         if( read_WCon == 0 ){ read_all = false;
             std::cout  << "Warning! wConfig not read. " << std::endl; 
             hd->os_log << "Warning! wConfig not read. " << std::endl;}
@@ -1515,8 +1536,8 @@ bool readParaInput(SysPara *sp, Header *hd)
 
         ifstr.close();
         if(read_all) {
-            std::cout << "done" << std::endl;
-            hd->os_log<< "done" << std::endl;
+            std::cout << "finished" << std::endl;
+            hd->os_log<< "finished" << std::endl;
             return true;  
         } 
         return false;
@@ -1828,10 +1849,6 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
     if( ostr.is_open() ) {
         ostr << "# van-der-Waals energy after " << step << " steps" << std::endl
              << "bin H intra inter" << std::endl;
-        /*for( int i=0; i<2*sp->N_CH; i++ ) {
-            ostr << "Chn" << i%sp->N_CH << " ";
-        } ostr << std::endl;
-        std::setprecision(4); std::fixed;*/
         for( int i=0; i<sp->NBin; i++ ) {
             ostr << i << " " << ot->H[i];
             for( int j=0; j<2; j++ ) {
@@ -1846,6 +1863,46 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
         std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->vdWnm << std::endl;
         return false;
     }
+}
+// write energy time development
+bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
+{
+    ofstream ostr;
+    if( init == 0 ) {
+        ostr.open(hd->enertm, ios::out);
+        if( ostr.is_open() ) {
+            ostr << "# energy time development" << std::endl 
+                 << "step E" << std::endl;
+            ostr.close();
+            return true;
+        }
+        else {
+            hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->enertm << std::endl;
+            std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->enertm << std::endl;
+            return false;
+        }
+    }
+    else if( init == 1 ) {
+        ostr.open(hd->enertm, ios::app);
+        if( ostr.is_open() ) {
+            for( int i=0; i<sp->T_WRITE; i++ ) {
+                ostr << ((step-1)/sp->T_WRITE)*sp->T_WRITE + i << " " << ot->Et[i] << std::endl;
+            }
+            ostr.close();
+            return true;
+        }
+        else {
+            hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->enertm << std::endl;
+            std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->enertm << std::endl;
+            return false;
+        }
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not write to file " << hd->enertm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not write to file " << hd->enertm << std::endl;
+        return false;
+    }
+
 }
 // writes backup file in SAMC run
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
@@ -3430,6 +3487,7 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
         delete[] ot->tGyrEigCur[i]; }
     delete[] ot->tGyrEigCur;
     delete[] ot->vdWener;
+    delete[] ot->Et;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

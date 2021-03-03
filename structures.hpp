@@ -50,6 +50,7 @@ struct SysPara {
     bool Ree;               // end-to-end distance distribution
     bool tGyr;              // tensor of gyration
     bool vdWener;           // van-der-Waals energy
+    bool Et;                // energy time development
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         std::vector<double> ConfigE;
         double ConfigV;
@@ -66,6 +67,7 @@ struct Header {
     std::string tGyrnm;     // output file name tensor of gyration
     std::string vdWnm;      // output file name van-der-Waals energy
     std::string grdcnm;     // output file name ground state configuration
+    std::string enertm;     // output file name energy time development
     std::string lognm;      // output file system log
 
     std::ofstream os_log;   // ofstream of log file
@@ -81,6 +83,7 @@ struct Output {
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
     double *vdWener;                // intra- and inter-chain van-der-Waals energy
+    double *Et;                     // energy time development
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[5];  // # of attempted moves

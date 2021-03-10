@@ -1852,7 +1852,7 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
         for( int i=0; i<sp->NBin; i++ ) {
             ostr << i << " " << ot->H[i];
             for( int j=0; j<2; j++ ) {
-                ostr << " " << std::setprecision(4) << std::fixed << (ot->vdWener[i*2 + j])/(2*ot->H[i]);
+                ostr << " " << std::setprecision(4) << std::fixed << (ot->vdWener[i*2 + j])/(ot->H[i]);
             } ostr << std::endl;
         }
         ostr.close();

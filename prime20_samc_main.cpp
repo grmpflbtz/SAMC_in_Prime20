@@ -1868,6 +1868,10 @@ bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step)
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
 {
     ofstream ostr;
+    double Eold, Enew;
+
+    Eold = +2.0;
+
     if( init == 0 ) {
         ostr.open(hd->enertm, ios::out);
         if( ostr.is_open() ) {
@@ -1886,7 +1890,11 @@ bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
         ostr.open(hd->enertm, ios::app);
         if( ostr.is_open() ) {
             for( int i=0; i<sp->T_WRITE; i++ ) {
-                ostr << ((step-1)/sp->T_WRITE)*sp->T_WRITE + i << " " << ot->Et[i] << std::endl;
+                Enew = ot->Et[i];
+                if( abs(Enew-Eold) >= 1.0 ) {
+                    ostr << ((step-1)/sp->T_WRITE)*sp->T_WRITE + i << " " << Enew << std::endl;
+                    Eold = Enew;
+                }
             }
             ostr.close();
             return true;

@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
             }
         }
         if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { std::cout << "overlapp in chain !!!" << std::endl; }
-        else { std::cout << "done" << std::endl; }
+        else { std::cout << "complete" << std::endl; }
     }
 
 
@@ -1062,8 +1062,9 @@ int sim_parameter_print(SysPara *sp, ostream &os)
         if( sp->wConfig == true ) { obs = 1;
             os << "- Configurations at energies:";
             for( int i=0; i<sp->ConfigE.size(); i++ ) { os << " " << sp->ConfigE.at(i); }
-            os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl;
-        }
+            os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl; }
+        if( sp->Et == true ) { obs = 1;
+            os << "- E(t) energy time development" << std::endl; }
         if( sp->vdWener == true ) { obs = 1;
             os << "- van-der-Waals energy (intra- & inter-chain)" << std::endl; }
         if(obs == 0) {
@@ -1536,8 +1537,8 @@ bool readParaInput(SysPara *sp, Header *hd)
 
         ifstr.close();
         if(read_all) {
-            std::cout << "finished" << std::endl;
-            hd->os_log<< "finished" << std::endl;
+            std::cout << "complete" << std::endl;
+            hd->os_log<< "complete" << std::endl;
             return true;  
         } 
         return false;
@@ -1876,7 +1877,7 @@ bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
         ostr.open(hd->enertm, ios::out);
         if( ostr.is_open() ) {
             ostr << "# energy time development" << std::endl 
-                 << "step E" << std::endl;
+                 << "# step E" << std::endl;
             ostr.close();
             return true;
         }
@@ -1926,7 +1927,7 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# sequence " << sp->AA_seq << std::endl;
         backup << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << std::endl;
         backup << "# gammasum = " << gammasum << " (current gamma = " << gamma << ")" << std::endl;
-        backup << "# gamma_0 = " << sp->GAMMA_0 << ", constant until T_0 = " << sp->T_0 << std::endl;
+        backup << "# gamma_0 = " << sp->GAMMA_0 << ", T_0 = " << sp->T_0 << std::endl;
         backup << "# current runtime: " << Timer.curRunTime() << std::endl;
         backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
         backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) of local moves" << std::endl;

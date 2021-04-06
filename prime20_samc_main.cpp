@@ -884,7 +884,8 @@ int main(int argc, char *argv[])
 
         //gamma update
         if(!sp->FIX_lngE){
-            gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
+            //gamma = sp->GAMMA_0*sp->T_0/((double)max(sp->T_0,step));       // from Liang et al.
+            gamma = min(sp->GAMMA_0, sp->T_0/(double)step);
         }
 
         //  energy time development observable
@@ -1936,7 +1937,7 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# accepted " << ot->naccept[4] << " of " << ot->nattempt[4] << " (" << 100*(double)ot->naccept[4]/(double)ot->nattempt[4] << "%) of chain rotation moves" << std::endl;
         backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << ot->lngE[i] << " " << ot->H[i] << std::endl;
+            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << std::setprecision(15) << ot->lngE[i] << " " << ot->H[i] << std::endl;
         }
         backup << "# current configuration ( E=" << E << ")" << std::endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;

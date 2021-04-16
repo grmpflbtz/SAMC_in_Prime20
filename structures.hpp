@@ -51,6 +51,7 @@ struct SysPara {
     bool tGyr;              // tensor of gyration
     bool vdWener;           // van-der-Waals energy
     bool Et;                // energy time development
+    bool dihedral;          // dihedral angles
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         std::vector<double> ConfigE;
         double ConfigV;
@@ -68,6 +69,8 @@ struct Header {
     std::string vdWnm;      // output file name van-der-Waals energy
     std::string grdcnm;     // output file name ground state configuration
     std::string enertm;     // output file name energy time development
+    std::string dihedPhinm; // output file name dihedral angle Phi
+    std::string dihedPsinm; // output file name dihedral angle Psi
     std::string lognm;      // output file system log
 
     std::ofstream os_log;   // ofstream of log file
@@ -84,6 +87,8 @@ struct Output {
     double **tGyrEigCur;            // current principal moments of tensor of gyration
     double *vdWener;                // intra- and inter-chain van-der-Waals energy
     double *Et;                     // energy time development
+    long unsigned int ***dihePhi;
+    long unsigned int ***dihePsi;
     int *conf_n;                    // # of configs written
     int *conf_wt;                   // last time writing config for this energy
     long unsigned int nattempt[5];  // # of attempted moves

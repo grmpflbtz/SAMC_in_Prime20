@@ -126,6 +126,7 @@ bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                 
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
+bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);                    // write dihedral angles
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
@@ -148,6 +149,8 @@ bool resetBCcouter(SysPara *sp, Chain Chn[]);                                   
 int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate radius of gyration
 int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
 int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin, double &vdW_intra, double &vdW_inter, int recalc);                   // calculate van-der-Waals energy
+double calc_phi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Phi
+double calc_psi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Psi
 
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
@@ -179,7 +182,7 @@ int main(int argc, char *argv[])
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
     int oldBox;                                             // variables for neighbour list calculations
     long unsigned int step, tcont;                          // time variable keeping track of # steps passed
-    int it;
+    int it, angl;
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
     double m_total;                                         // total mass of the system
@@ -225,19 +228,29 @@ int main(int argc, char *argv[])
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
     ot->Ree2 = new double[sp->N_CH * sp->NBin];
     ot->rGyr = new double*[sp->N_CH];
-    for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
+        for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
     ot->rGyrCur = new double[sp->N_CH];
     ot->tGyrEig = new double**[sp->N_CH];
-    for( int i=0; i<sp->N_CH; i++) {
-        ot->tGyrEig[i] = new double*[sp->NBin]; 
-        for( int j=0; j<sp->NBin; j++ ) {
-            ot->tGyrEig[i][j] = new double[3]{};
+        for( int i=0; i<sp->N_CH; i++) {
+            ot->tGyrEig[i] = new double*[sp->NBin]; 
+            for( int j=0; j<sp->NBin; j++ ) {
+                ot->tGyrEig[i][j] = new double[3]{};
+            }
         }
-    }
     ot->tGyrEigCur = new double*[sp->N_CH];
-    for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
+        for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
     ot->vdWener = new double[sp->NBin * 2];
     ot->Et = new double[sp->T_WRITE];
+    ot->dihePhi = new long unsigned int**[sp->NBin];
+    ot->dihePsi = new long unsigned int**[sp->NBin];
+        for(int i=0; i<sp->NBin; i++) {
+            ot->dihePhi[i] = new long unsigned int*[sp->N_CH*sp->N_AA];
+            ot->dihePsi[i] = new long unsigned int*[sp->N_CH*sp->N_AA];
+            for(int j=0; j<(sp->N_CH*sp->N_AA); j++) {
+                ot->dihePhi[i][j] = new long unsigned int[360];
+                ot->dihePsi[i][j] = new long unsigned int[360];
+            }
+        }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
 
@@ -295,6 +308,16 @@ int main(int argc, char *argv[])
     }
     if(sp->Et) {
         output_Et(sp, hd, ot, 0, 0);
+    }
+    if(sp->dihedral) {
+        for( int i=0; i<sp->NBin; i++ ) {
+            for( int j=0; j<(sp->N_CH*sp->N_AA - sp->N_CH); j++ ) {     // in every chain the dihedral angle on one end can't be calculated, hence the " - sp->N_CH "
+                for( int k=0; k<360; k++ ) {
+                    ot->dihePhi[i][j][k] = 0;
+                    ot->dihePsi[i][j][k] = 0;
+                }
+            }
+        }
     }
     if(sp->wConfig) {
         for( int i=0; i<sp->ConfigE.size(); i++ ) {
@@ -843,6 +866,18 @@ int main(int argc, char *argv[])
                     ot->Ree2[sp->N_CH*eBin_o + i] += dotPro(dist, dist);
                 }
             }
+            if(sp->dihedral) {
+                for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+                    if( i%sp->N_AA != 0 ) {
+                        angl = floor(calc_phi(sp, Chn, i) + 180);
+                        ot->dihePhi[eBin_o][i][angl] += 1;
+                    }
+                    if( i%sp->N_AA != (sp->N_AA-1) ) {
+                        angl = floor(calc_psi(sp, Chn, i) + 180);
+                        ot->dihePsi[eBin_o][i][angl] += 1;
+                    }
+                }
+            }
             if(sp->wConfig) {
                 for( int i=0; i<sp->ConfigE.size(); i++ ) {
                     if( abs(Eold - sp->ConfigE.at(i)) <= sp->ConfigV && ot->conf_n[i]<10 ) {
@@ -914,6 +949,9 @@ int main(int argc, char *argv[])
             }
             if(sp->Et) {
                 output_Et(sp, hd, ot, step+1, 1);
+            }
+            if(sp->dihedral) {
+                output_dihedral(sp, hd, ot, step+1);
             }
         }
 
@@ -1047,8 +1085,8 @@ int sim_parameter_print(SysPara *sp, ostream &os)
     int obs = 0;
     os << ">> SAMC parameters <<" << std::endl
        << "Allowed energy range:     [" << sp->EMin << ";" << sp->EMax << "]" << std::endl
-       << "# of energy bins:         " << sp ->NBin << std::endl
-       << "# of SAMC steps:          " << sp->T_MAX << std::endl;
+       << "N of energy bins:         " << sp ->NBin << std::endl
+       << "N of SAMC steps:          " << sp->T_MAX << std::endl;
         if(sp->FIX_lngE == true ) {
             os << "Using fixed lng(E)" << std::endl; }
         else {
@@ -1066,6 +1104,8 @@ int sim_parameter_print(SysPara *sp, ostream &os)
             os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl; }
         if( sp->Et == true ) { obs = 1;
             os << "- E(t) energy time development" << std::endl; }
+        if( sp->dihedral == true ) { obs = 1;
+            os << "- dihedral angles Phi and Psi" << std::endl; }
         if( sp->vdWener == true ) { obs = 1;
             os << "- van-der-Waals energy (intra- & inter-chain)" << std::endl; }
         if(obs == 0) {
@@ -1095,6 +1135,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->vdWnm  = "vdWE.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->enertm = "Et.dat";
+    hd->dihedPhinm = "Phi.dat";
+    hd->dihedPsinm = "Psi.dat";
     hd->lognm  = "out.log";
 
     //reading arguments
@@ -1112,10 +1154,6 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
                 hd->rrunnm = opt2; }
             else if( opt1.compare("-d") == 0 ) {
                 hd->dbposi = opt2; }
-            else if( opt1.compare("-h") == 0 ) {
-                hd->hbmatr = opt2; }
-            else if( opt1.compare("-g") == 0 ) {
-                hd->tGyrnm = opt2; }
             else {
                 display_help = true;
             }
@@ -1268,7 +1306,8 @@ bool readParaInput(SysPara *sp, Header *hd)
     stringstream ss_line, ss_ener;
     std::string s_line, option, value;
     double d;
-    bool read_all = true;
+    bool read_essential = true;
+    bool read_observ = true;
 
     std::cout << "reading parameter input ... ";
     hd->os_log<< "reading parameter input ... ";
@@ -1306,6 +1345,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_tGyr= 0;
     int read_vdWe= 0;
     int read_Et  = 0;
+    int read_angl= 0;
     int read_WCon= 0;
     int read_ConE= 0;
     int read_ConV= 0;
@@ -1397,6 +1437,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("ener_t")==0 ) {
                     if( value.compare("true")==0 ) {sp->Et = true; read_Et = 1; }
                     else if( value.compare("false")==0 ) { sp->Et = false; read_Et = 1; } }
+                else if( option.compare("dihedral")==0 ) {
+                    if( value.compare("true")==0 ) {sp->dihedral = true; read_angl = 1; }
+                    else if( value.compare("false")==0 ) { sp->dihedral = false; read_angl = 1; } }
                 else if( option.compare("wConfig")==0 ) {
                     if( value.compare("true")==0 ) { 
                         sp->wConfig = true;    read_WCon = 1;
@@ -1427,117 +1470,120 @@ bool readParaInput(SysPara *sp, Header *hd)
         sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
         sp->stepit = 4*sp->N_AA*sp->N_CH;
 
-        if( read_NCH  == 0 ){ read_all = false;
-            std::cout  << "Warning! N_CH not read. " << std::endl; 
-            hd->os_log << "Warning! N_CH not read. " << std::endl;}
-        if( read_NAA  == 0 ){ read_all = false;
-            std::cout  << "Warning! N_AA not read. " << std::endl; 
-            hd->os_log << "Warning! N_AA not read. " << std::endl;}
-        if( read_AAS  == 0 ){ read_all = false;
-            std::cout  << "Warning! AAseq not read. " << std::endl; 
-            hd->os_log << "Warning! AAseq not read. " << std::endl;}
-        if( read_L    == 0 ){ read_all = false;
-            std::cout  << "Warning! L not read. " << std::endl; 
-            hd->os_log << "Warning! L not read. " << std::endl;}
-        if( read_NBin == 0 ){ read_all = false;
-            std::cout  << "Warning! NBin not read. " << std::endl; 
-            hd->os_log << "Warning! NBin not read. " << std::endl;}
-        if( read_EMin == 0 ){ read_all = false;
-            std::cout  << "Warning! EMin not read. " << std::endl; 
-            hd->os_log << "Warning! EMin not read. " << std::endl;}
-        if( read_EMax == 0 ){ read_all = false;
-            std::cout  << "Warning! EMax not read. " << std::endl; 
-            hd->os_log << "Warning! EMax not read. " << std::endl;}
-        if( read_ESt  == 0 ){ read_all = false;
-            std::cout  << "Warning! EStart not read. " << std::endl; 
-            hd->os_log << "Warning! EStart not read. " << std::endl;}
-        if( read_tSt  == 0 ){ read_all = false;
-            std::cout  << "Warning! tStart not read. " << std::endl; 
-            hd->os_log << "Warning! tStart not read. " << std::endl;}
-        if( read_T0   == 0 ){ read_all = false;
-            std::cout  << "Warning! T_0 not read. " << std::endl; 
-            hd->os_log << "Warning! T_0 not read. " << std::endl;}
-        if( read_TMax == 0 ){ read_all = false;
-            std::cout  << "Warning! T_Max not read. " << std::endl; 
-            hd->os_log << "Warning! T_Max not read. " << std::endl;}
-        if( read_TWrt == 0 ){ read_all = false;
-            std::cout  << "Warning! T_Write not read. " << std::endl; 
-            hd->os_log << "Warning! T_Write not read. " << std::endl;}
-        if( read_TBCR == 0 ){ read_all = false;
-            std::cout  << "Warning! T_BCReset not read. " << std::endl; 
-            hd->os_log << "Warning! T_BCReset not read. " << std::endl;}
-        if( read_Gam0 == 0 ){ read_all = false;
-            std::cout  << "Warning! gamma_0 not read. " << std::endl; 
-            hd->os_log << "Warning! gamma_0 not read. " << std::endl;}
-        if( read_NBox == 0 ){ read_all = false;
-            std::cout  << "Warning! NBox not read. " << std::endl; 
-            hd->os_log << "Warning! NBox not read. " << std::endl;}
-        if( read_LBox == 0 ){ read_all = false;
-            std::cout  << "Warning! LBox not read. " << std::endl; 
-            hd->os_log << "Warning! LBox not read. " << std::endl;}
-        if( read_WTWi == 0 ){ read_all = false;
-            std::cout  << "Warning! WT_wiggle not read. " << std::endl; 
-            hd->os_log << "Warning! WT_wiggle not read. " << std::endl;}
-        if( read_WTPh == 0 ){ read_all = false;
-            std::cout  << "Warning! WT_phi not read. " << std::endl; 
-            hd->os_log << "Warning! WT_phi not read. " << std::endl;}
-        if( read_WTPs == 0 ){ read_all = false;
-            std::cout  << "Warning! WT_psi not read. " << std::endl; 
-            hd->os_log << "Warning! WT_psi not read. " << std::endl;}
-        if( read_WTTr == 0 ){ read_all = false;
-            std::cout  << "Warning! WT_trans not read. " << std::endl; 
-            hd->os_log << "Warning! WT_trans not read. " << std::endl;}
-        if( read_WTRo == 0 ){ read_all = false;
-            std::cout  << "Warning! WT_rot not read. " << std::endl; 
-            hd->os_log << "Warning! WT_rot not read. " << std::endl;}
-        if( read_Disp == 0 ){ read_all = false;
-            std::cout  << "Warning! DispMax not read. " << std::endl; 
-            hd->os_log << "Warning! DispMax not read. " << std::endl;}
-        if( read_DPhi == 0 ){ read_all = false;
-            std::cout  << "Warning! dPhi_Max not read. " << std::endl; 
-            hd->os_log << "Warning! dPhi_Max not read. " << std::endl;}
-        if( read_DPsi == 0 ){ read_all = false;
-            std::cout  << "Warning! dPsi_Max not read. " << std::endl; 
-            hd->os_log << "Warning! dPsi_Max not read. " << std::endl;}
-        if( read_DTrn == 0 ){ read_all = false;
-            std::cout  << "Warning! dTrn_Max not read. " << std::endl; 
-            hd->os_log << "Warning! dTrn_Max not read. " << std::endl;}
-        if( read_DRot == 0 ){ read_all = false;
-            std::cout  << "Warning! dRot_Max not read. " << std::endl; 
-            hd->os_log << "Warning! dRot_Max not read. " << std::endl;}
-        if( read_ETru == 0 ){ read_all = false;
-            std::cout  << "Warning! EtruncUp not read. " << std::endl; 
-            hd->os_log << "Warning! EtruncUp not read. " << std::endl;}
-        if( read_FixL == 0 ){ read_all = false;
-            std::cout  << "Warning! Fix_lngU not read. " << std::endl; 
-            hd->os_log << "Warning! Fix_lngU not read. " << std::endl;}
-        if( read_HBCM == 0 ){ read_all = false;
-            std::cout  << "Warning! HB_ContMat not read. " << std::endl; 
-            hd->os_log << "Warning! HB_ContMat not read. " << std::endl;}
-        if( read_Ree  == 0 ){ read_all = false;
-            std::cout  << "Warning! Ree not read. " << std::endl; 
-            hd->os_log << "Warning! Ree not read. " << std::endl;}
-        if( read_tGyr == 0 ){ read_all = false;
-            std::cout  << "Warning! tGyr not read. " << std::endl; 
-            hd->os_log << "Warning! tGyr not read. " << std::endl;}
-        if( read_vdWe == 0 ){ read_all = false;
-            std::cout  << "Warning! vdWener not read. " << std::endl; 
-            hd->os_log << "Warning! vdWener not read. " << std::endl;}
-        if( read_Et == 0 ){ read_all = false;
-            std::cout  << "Warning! Et not read. " << std::endl; 
-            hd->os_log << "Warning! Et not read. " << std::endl;}
-        if( read_WCon == 0 ){ read_all = false;
-            std::cout  << "Warning! wConfig not read. " << std::endl; 
-            hd->os_log << "Warning! wConfig not read. " << std::endl;}
-        if( read_ConE == 0 ){ read_all = false;
-            std::cout  << "Warning! ConfigE not read. " << std::endl; 
-            hd->os_log << "Warning! ConfigE not read. " << std::endl;}
-        if( read_ConV == 0 ){ read_all = false;
-            std::cout  << "Warning! ConfigV not read. " << std::endl; 
-            hd->os_log << "Warning! ConfigV not read. " << std::endl;}
+        if( read_NCH  == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- N_CH not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- N_CH not found. " << std::endl;}
+        if( read_NAA  == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- N_AA not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- N_AA not found. " << std::endl;}
+        if( read_AAS  == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- AAseq not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- AAseq not found. " << std::endl;}
+        if( read_L    == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- L not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- L not found. " << std::endl;}
+        if( read_NBin == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- NBin not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- NBin not found. " << std::endl;}
+        if( read_EMin == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- EMin not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- EMin not found. " << std::endl;}
+        if( read_EMax == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- EMax not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- EMax not found. " << std::endl;}
+        if( read_ESt  == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- EStart not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- EStart not found. " << std::endl;}
+        if( read_tSt  == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- tStart not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- tStart not found. " << std::endl;}
+        if( read_T0   == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- T_0 not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- T_0 not found. " << std::endl;}
+        if( read_TMax == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- T_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- T_Max not found. " << std::endl;}
+        if( read_TWrt == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- T_Write not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- T_Write not found. " << std::endl;}
+        if( read_TBCR == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- T_BCReset not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- T_BCReset not found. " << std::endl;}
+        if( read_Gam0 == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- gamma_0 not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- gamma_0 not found. " << std::endl;}
+        if( read_NBox == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- NBox not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- NBox not found. " << std::endl;}
+        if( read_LBox == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- LBox not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- LBox not found. " << std::endl;}
+        if( read_WTWi == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_wiggle not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_wiggle not found. " << std::endl;}
+        if( read_WTPh == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_phi not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_phi not found. " << std::endl;}
+        if( read_WTPs == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_psi not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_psi not found. " << std::endl;}
+        if( read_WTTr == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_trans not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_trans not found. " << std::endl;}
+        if( read_WTRo == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_rot not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_rot not found. " << std::endl;}
+        if( read_Disp == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- DispMax not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- DispMax not found. " << std::endl;}
+        if( read_DPhi == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- dPhi_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- dPhi_Max not found. " << std::endl;}
+        if( read_DPsi == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- dPsi_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- dPsi_Max not found. " << std::endl;}
+        if( read_DTrn == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- dTrn_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- dTrn_Max not found. " << std::endl;}
+        if( read_DRot == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- dRot_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- dRot_Max not found. " << std::endl;}
+        if( read_ETru == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- EtruncUp not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- EtruncUp not found. " << std::endl;}
+        if( read_FixL == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- Fix_lngU not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- Fix_lngU not found. " << std::endl;}
+        if( read_HBCM == 0 ){ read_observ = false;
+            std::cout  << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl;}
+        if( read_Ree  == 0 ){ read_observ = false;
+            std::cout  << "Warning! Ree not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! Ree not found. Set to FALSE by default" << std::endl;}
+        if( read_tGyr == 0 ){ read_observ = false;
+            std::cout  << "Warning! tGyr not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! tGyr not found. Set to FALSE by default" << std::endl;}
+        if( read_vdWe == 0 ){ read_observ = false;
+            std::cout  << "Warning! vdWener not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! vdWener not found. Set to FALSE by default" << std::endl;}
+        if( read_Et == 0 ){ read_observ = false;
+            std::cout  << "Warning! Et not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! Et not found. Set to FALSE by default" << std::endl;}
+        if( read_angl == 0 ){ read_observ = false;
+            std::cout  << "Warning! dihedral not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! dihedral not found. Set to FALSE by default" << std::endl;}
+        if( read_WCon == 0 ){ read_observ = false;
+            std::cout  << "Warning! wConfig not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! wConfig not found. Set to FALSE by default" << std::endl;}
+        if( read_ConE == 0 ){ read_observ = false;
+            std::cout  << "Warning! ConfigE not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! ConfigE not found. Set to FALSE by default" << std::endl;}
+        if( read_ConV == 0 ){ read_observ = false;
+            std::cout  << "Warning! ConfigV not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! ConfigV not found. Set to FALSE by default" << std::endl;}
 
         ifstr.close();
-        if(read_all) {
+        if(read_essential) {
             std::cout << "complete" << std::endl;
             hd->os_log<< "complete" << std::endl;
             return true;  
@@ -1913,6 +1959,51 @@ bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
         return false;
     }
 
+}
+// write dihedral angles
+bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+
+    // output Phi
+    ostr.open(hd->dihedPhinm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# backbone Phi Φ angles after " << step << " steps" << std::endl
+             << "# Parameters: Nbin=" << sp->NBin << ", N_CH=" << sp->N_CH << ", N_AA=" << sp->N_AA << ", angles=" << 360 << std::endl;
+        for( int i=0; i<sp->NBin; i++ ) {
+            for( int j=0; j<(sp->N_CH*sp->N_AA); j++ ) {
+                for( int k=0; k<360; k++ ) {
+                    ostr << ot->dihePhi[i][j][k] << std::endl;
+                }
+            }
+        }
+        ostr.close();
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->dihedPhinm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->dihedPhinm << std::endl;
+    }
+    // output Psi
+    ostr.open(hd->dihedPsinm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# backbone Psi Ψ angles after " << step << " steps" << std::endl
+             << "# Parameters: Nbin=" << sp->NBin << ", N_CH=" << sp->N_CH << ", N_AA=" << sp->N_AA << ", angles=" << 360 << std::endl;
+        for( int i=0; i<sp->NBin; i++ ) {
+            for( int j=0; j<(sp->N_CH*sp->N_AA); j++ ) {
+                for( int k=0; k<360; k++ ) {
+                    ostr << ot->dihePsi[i][j][k] << std::endl;
+                }
+            }
+        }
+        ostr.close();
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->dihedPsinm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->dihedPsinm << std::endl;
+        return false;
+    }
+
+    return true;
 }
 // writes backup file in SAMC run
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
@@ -3406,6 +3497,64 @@ int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[], int eBin, double &vdW
 
     return 0;
 }
+// calculate dihedal angle Phi
+double calc_phi(SysPara *sp, Chain Chn[], int p)
+{
+    int sgn;
+    double b1[3], b2[3], b3[3], n1[3], n2[3];
+    double angl, nsq;
+
+    // n1: normal vector of (C-N-Ca) plane
+    std::tie(b1[0], b1[1], b1[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)-1].Bd[2], Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[0]);
+    std::tie(b2[0], b2[1], b2[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[0],   Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[1]);
+    std::tie(n1[0], n1[1], n1[2]) = crossPro(b1, b2);
+    nsq = dotPro(n1, n1);
+    n1[0] /= sqrt(nsq); n1[1] /= sqrt(nsq); n1[2] /= sqrt(nsq);
+    // n2: negative normal vector of (N-Ca-C) plane
+    std::tie(b3[0], b3[1], b3[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[1], Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[2]);
+    std::tie(n2[0], n2[1], n2[2]) = crossPro(b3, b2);
+    nsq = dotPro(n2, n2);
+    n2[0] /= sqrt(nsq); n2[1] /= sqrt(nsq); n2[2] /= sqrt(nsq);
+    // angle between n1 and n2
+    angl = dotPro(n1, n2);
+    if(angl <= -1) return -180.0;
+    if(angl >= 1)  return 0.0;
+    angl = acos(angl)*180.0/M_PI;
+    // sign of angle: right-hand rotation of b1 (C-N) and n2 (N_Ca_C normal vector) share one half-space, else left-hand.
+    sgn = -1;
+    if(dotPro(b1,n2)>0) sgn=1;
+
+    return sgn*angl;
+}
+// calculate dihedral angle Psi
+double calc_psi(SysPara *sp, Chain Chn[], int p)
+{
+    int sgn;
+    double b1[3], b2[3], b3[3], n1[3], n2[3];
+    double angl, nsq;
+
+    // n1: normal vector of (N-Ca-C) plane
+    std::tie(b1[0], b1[1], b1[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[0], Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[1]);
+    std::tie(b2[0], b2[1], b2[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[1], Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[2]);
+    std::tie(n1[0], n1[1], n1[2]) = crossPro(b1, b2);
+    nsq = dotPro(n1, n1);
+    n1[0] /= sqrt(nsq); n1[1] /= sqrt(nsq); n1[2] /= sqrt(nsq);
+    // n2: negative normal vector of (N-Ca-C) plane
+    std::tie(b3[0], b3[1], b3[2]) = distVecBC(sp, Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)].Bd[2], Chn[p/sp->N_AA].AmAc[(p%sp->N_AA)+1].Bd[0]);
+    std::tie(n2[0], n2[1], n2[2]) = crossPro(b3, b2);
+    nsq = dotPro(n2, n2);
+    n2[0] /= sqrt(nsq); n2[1] /= sqrt(nsq); n2[2] /= sqrt(nsq);
+    // angle between n1 and n2
+    angl = dotPro(n1, n2);
+    if(angl <= -1) return -180.0;
+    if(angl >= 1)  return 0.0;
+    angl = acos(angl)*180.0/M_PI;
+    // sign of angle: right-hand rotation of b1 (N-Ca) and n2 (Ca-C-N normal vector) share one half-space, else left-hand.
+    sgn = -1;
+    if(dotPro(b1,n2)>0) sgn=1;
+
+    return sgn*angl;
+}
 
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //          XXXXXXXXXXXX  LINK LIST FUNCTIONS  XXXXXXXXXXX
@@ -3486,18 +3635,28 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
     delete[] ot->lngE;
     delete[] ot->contHB;
     delete[] ot->Ree2;
-    for( int i=0; i<sp->N_CH; i++ ) { delete[] ot->rGyr[i]; }
-    delete[] ot->rGyr;
+    for( int i=0; i<sp->N_CH; i++ ) { 
+        delete[] ot->rGyr[i]; }
+        delete[] ot->rGyr;
     delete[] ot->rGyrCur;
     for( int i=0; i<sp->N_CH; i++ ) { 
-        for( int j=0; j<sp->NBin; j++ ) { delete[] ot->tGyrEig[i][j]; }
-        delete[] ot->tGyrEig[i]; }
-    delete[] ot->tGyrEig;
+        for( int j=0; j<sp->NBin; j++ ) { 
+            delete[] ot->tGyrEig[i][j]; }
+            delete[] ot->tGyrEig[i]; }
+            delete[] ot->tGyrEig;
     for( int i=0; i<sp->N_CH; i++ ) {
         delete[] ot->tGyrEigCur[i]; }
     delete[] ot->tGyrEigCur;
     delete[] ot->vdWener;
     delete[] ot->Et;
+    for( int i=0; i<sp->NBin; i++ ) {
+        for( int j=0; j<(sp->N_CH*sp->N_AA); j++ ) {
+            delete[] ot->dihePhi[i][j];
+            delete[] ot->dihePsi[i][j]; }
+            delete[] ot->dihePhi[i];
+            delete[] ot->dihePsi[i]; }
+            delete[] ot->dihePhi;
+            delete[] ot->dihePsi;
     delete[] ot->conf_n;
     delete[] ot->conf_wt;
 

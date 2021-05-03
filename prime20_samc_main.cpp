@@ -390,6 +390,22 @@ int main(int argc, char *argv[])
     // position check file output
     outputPositions(sp,hd, hd->dbposi, Chn, 0, Eold);
 
+
+    eBin_o = floor(((Eold-sp->EMin)/sp->BinW)-0.00001);
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+        if( i%sp->N_AA != 0 ) {
+            angl = floor(calc_phi(sp, Chn, i) + 180);
+            ot->dihePhi[eBin_o][i][angl] += 1;
+        }
+        if( i%sp->N_AA != (sp->N_AA-1) ) {
+            angl = floor(calc_psi(sp, Chn, i) + 180);
+            ot->dihePsi[eBin_o][i][angl] += 1;
+        }
+    }
+    output_dihedral(sp, hd, ot, 0);
+
+
+
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     step = 0;
     while( true ) {

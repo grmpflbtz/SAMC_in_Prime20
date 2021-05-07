@@ -1074,21 +1074,16 @@ int program_start_print(ostream &os)
 }
 int command_print(Header *hd, ostream &os)
 {
-    os << "Input Initial configuration: " << hd->confnm << std::endl
-       << "Input System parameters:     " << hd->paranm << std::endl
-       << "Input DOS:                   " << hd->lngEnm << std::endl
-       << "Input rerun:                 " << hd->rrunnm << std::endl
-       << "Output debug position:       " << hd->dbposi << std::endl
-       << "Output HB matrix:            " << hd->hbmatr << std::endl
-       << "Output inertia tensor:       " << hd->tGyrnm << std::endl
-       << "Output van-der-Waals energy: " << hd->vdWnm  << std::endl
-       << "Output ground state config.: " << hd->grdcnm << std::endl
-       << "Output simulation log:       " << hd->lognm  << std::endl;
+    os << "Input file system parameters: " << hd->paranm << std::endl
+       << "Input file DOS:               " << hd->lngEnm << std::endl
+       << "Output file simulation log:   " << hd->lognm  << std::endl
+       << "------------------------" << std::endl;
     return 0;
 }
 int system_parameter_print(SysPara *sp, ostream &os)
 {
-    os << ">> system information <<" << std::endl
+    os << "------------------------" << std::endl
+       << ">> system information <<" << std::endl
        << "No. of chains:            " << sp->N_CH << std::endl
        << "Degree of polymerization: " << sp->N_AA << std::endl
        << "Amino acid sequence:      " << sp->AA_seq << std::endl
@@ -1099,7 +1094,8 @@ int system_parameter_print(SysPara *sp, ostream &os)
 int sim_parameter_print(SysPara *sp, ostream &os)
 {
     int obs = 0;
-    os << ">> SAMC parameters <<" << std::endl
+    os << "---------------------" << std::endl
+       << ">> SAMC parameters <<" << std::endl
        << "Allowed energy range:     [" << sp->EMin << ";" << sp->EMax << "]" << std::endl
        << "N of energy bins:         " << sp ->NBin << std::endl
        << "N of SAMC steps:          " << sp->T_MAX << std::endl;
@@ -1109,6 +1105,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
             os << "T_0:                      " << sp->T_0 << std::endl
                << "gamma_0:                  " << sp->GAMMA_0 << std::endl; }
     os << "frequency of DOS output   " << sp->T_WRITE << std::endl
+       << "-----------------" << std::endl
        << ">> observables <<" << std::endl;
         if( sp->HB_ContMat == true ) { obs = 1;
             os << "- Hydrogen bond contact matrices" << std::endl; }

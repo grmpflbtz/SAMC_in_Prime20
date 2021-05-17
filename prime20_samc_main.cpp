@@ -127,7 +127,7 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
 bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);                    // write dihedral angles
-bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
+bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
@@ -947,7 +947,7 @@ int main(int argc, char *argv[])
         // write Backup-File
         if( (step+1)%sp->T_WRITE == 0 ) {
             if(!sp->FIX_lngE) {
-                BackupSAMCrun(sp, hd, ot, Chn, Timer, step, gammasum, gamma, Eold);
+                BackupSAMCrun(sp, hd, ot, Chn, Timer, 1, step, gammasum, gamma, Eold);
             } else {
                 BackupProdRun(sp, hd, ot, Timer, step);
             }
@@ -2019,13 +2019,20 @@ bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step)
     return true;
 }
 // writes backup file in SAMC run
-bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, unsigned long int t, double gammasum, double gamma, double E)
+bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E)
 {
-    std::ostringstream oss;
-    oss << "SAMCbackup_" << t/sp->T_WRITE << ".dat";
-    string name = oss.str();
     ofstream backup;
+    string name;
+    if(single_file==0) {
+        std::ostringstream oss;
+        oss << "SAMCoutput_" << t/sp->T_WRITE << ".dat";
+        name = oss.str();
+    }
+    else {
+        name = "SAMCoutput.dat";
+    }
     backup.open(name);
+
     if( backup.is_open() ) {
         backup << "# SAMC simulation of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
         backup << "# length of simulation box L = " << sp->L << std::endl;

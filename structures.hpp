@@ -44,6 +44,8 @@ struct SysPara {
     double DTRN_MAX;        // maximum chain translation
     double DROT_MAX;        // maximum angle chain rotation
 
+    int cluster_opt;        // cluster optimization on/off
+
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
     bool HB_ContMat;        // Hydrogen bond contact matrices

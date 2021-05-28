@@ -390,7 +390,6 @@ int main(int argc, char *argv[])
     // position check file output
     outputPositions(sp,hd, hd->dbposi, Chn, 0, Eold);
 
-
     eBin_o = floor(((Eold-sp->EMin)/sp->BinW)-0.00001);
     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
         if( i%sp->N_AA != 0 ) {
@@ -402,9 +401,6 @@ int main(int argc, char *argv[])
             ot->dihePsi[eBin_o][i][angl] += 1;
         }
     }
-    output_dihedral(sp, hd, ot, 0);
-
-
 
     // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     step = 0;
@@ -558,7 +554,8 @@ int main(int argc, char *argv[])
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
 
-            if( step%((int)1e2) == 0 ) {
+            // print estimated remaining time
+            if( sp->cluster_opt==1 && step%((int)1e3) == 0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
@@ -1230,7 +1227,7 @@ bool newChain(SysPara *sp, Chain Chn[], int chnNum)
     ZrotMtrx[2][1] = 0.0;
     ZrotMtrx[2][2] = 1.0;
         // rotation matrix around X axis
-    XrotAng = -11.0*M_PI/10.0;
+    XrotAng = -10.0*M_PI/10.0;
     XrotMtrx[0][0] = 1.0;
     XrotMtrx[0][1] = 0.0;
     XrotMtrx[0][2] = 0.0;
@@ -1351,6 +1348,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_DPsi= 0;
     int read_DTrn= 0;
     int read_DRot= 0;
+    int read_ClOp= 0;
     int read_ETru= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
@@ -1427,6 +1425,8 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->DTRN_MAX = stod(value, nullptr); read_DTrn = 1; }
                 else if( option.compare("DROT_MAX")==0 ) {
                     sp->DROT_MAX = stod(value, nullptr); read_DRot = 1; }
+                else if( option.compare("cluster")==0 ) {
+                    sp->cluster_opt = stoi(value, nullptr); read_ClOp = 1; }
                 else if( option.compare("EBIN_TRUNC_UP")==0 ) {
                     if( value.compare("true")==0 ) { 
                         sp->EBIN_TRUNC_UP = true; read_ETru = 1; }
@@ -1561,6 +1561,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_DRot == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- dRot_Max not found. " << std::endl; 
             hd->os_log << "--- ERROR --- dRot_Max not found. " << std::endl;}
+        if( read_ClOp == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- clusterOptimization not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- clusterOptimization not found. " << std::endl;}
         if( read_ETru == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- EtruncUp not found. " << std::endl; 
             hd->os_log << "--- ERROR --- EtruncUp not found. " << std::endl;}

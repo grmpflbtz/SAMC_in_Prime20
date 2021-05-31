@@ -3587,8 +3587,11 @@ int assignBox(SysPara *sp, Bead Bd)
 {
     int xBox, yBox, zBox, Box;
     xBox = floor(Bd.getR(0) / sp->LBOX);
+    if(xBox==sp->NBOX) {xBox=0;}
     yBox = floor(Bd.getR(1) / sp->LBOX);
+    if(yBox==sp->NBOX) {yBox=0;}
     zBox = floor(Bd.getR(2) / sp->LBOX);
+    if(zBox==sp->NBOX) {zBox=0;}
     Box = zBox*sp->NBOX*sp->NBOX + yBox*sp->NBOX + xBox;
     return Box;
 }

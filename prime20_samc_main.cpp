@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
     double vdW_intra, vdW_inter;
     double dist[3];                                         // distance vector
     double distabs;                                         // absolute distance
-    bool accept;                                            // acceptance value of move in SAMC
+    bool accept, newchn, ini_overlap;                       // acceptance value of move in SAMC; construction of new chain; overlapp in inital configuration
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
     int oldBox;                                             // variables for neighbour list calculations
     long unsigned int step, tcont;                          // time variable keeping track of # steps passed
@@ -328,7 +328,14 @@ int main(int argc, char *argv[])
 
 
     // geometry: read from input file or create new
-    if( !readCoord(sp, hd, Chn) ) {
+    ini_overlap=false;
+    if( readCoord(sp, hd, Chn) ) {
+        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
+            std::cout << "--- WARNING ---\toverlap in configuration from file '" << hd->confnm <<  "'" << std::endl;
+            ini_overlap = true;
+        }
+    }
+    else {
         std::cout << "building new chain(s) ... " << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
@@ -344,7 +351,11 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { std::cout << "overlapp in chain !!!" << std::endl; }
+        newchn = true;
+        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
+            std::cout << std::endl << "--- WARNING ---\toverlap in constructed configuration" << std::endl;
+            ini_overlap = true;
+        }
         else { std::cout << "complete" << std::endl; }
     }
 
@@ -379,16 +390,162 @@ int main(int argc, char *argv[])
             }
         }
         Eold += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
-        // overlapp check
-        for( int j=0; j<4; j++ ) {
-            if( EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0) < 0.0 ) {
-                std::cout << "--- ERROR ---\toverlapp in configuration detected" << std::endl;
-            }
-        }
     }
 
     // position check file output
-    outputPositions(sp,hd, hd->dbposi, Chn, 0, Eold);
+    outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+
+    // move overlapping/new chains to legalize/randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
+    if( newchn || ini_overlap ) {
+        if( ini_overlap ) { std::cout << "    ---> trying to solve overlap in configuration" << std::endl; }
+        else { std::cout << "Randomizing initial configuration" << std::endl; }
+
+        step = 0;
+        while( true ) {
+            // end pre-SAMC movement after tStart moves and within desired energy window
+            if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
+                if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == 0 ) {
+                    if(ini_overlap) { std::cout << "         completed overlap removal" << std::endl; }
+                    std::cout << "completed pre-SAMC moves after " << step << " steps" << std::endl << std::flush;
+                    break;
+                }
+            }
+
+            if( step%1000 == 0 ) {
+                std::cout << "pre-SAMC move " << step << "\r" << std::flush;
+            }
+            // HBList copy
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                HBLcpy[k][0] = HBList[k][0];
+                HBLcpy[k][1] = HBList[k][1];
+            }
+            deltaE = 0.0;
+            // select move type
+            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
+            if( moveselec < sp->WT_WIGGLE )                                                    { movetype = 0; }    // wiggle
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                                    { movetype = 1; }    // rotPhi
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )                         { movetype = 2; }    // rotPsi
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS )            { movetype = 3; }    // translation
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT ) { movetype = 4; }    // rotation
+            else { 
+                hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
+                std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
+            }
+            switch( movetype ) {
+                case 0:
+                    i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
+                    ip = i_rand/4;                              // amino acid identifier
+                    jp = i_rand%4;                              // bead
+                    accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
+                    break;
+                case 1:
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                                      // rotate lower or higher part
+                    accept = rotPhi(sp, Chn, ip, jp, deltaE);
+                    break;
+                case 2:
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
+                    accept = rotPsi(sp, Chn, ip, jp, deltaE);
+                    break;
+                case 3:
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    accept = translation(sp, Chn, ip, deltaE);
+                    break;
+                case 4:
+                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    accept = rotation(sp, Chn, ip, deltaE);
+                    break;
+                default:
+                    std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
+            }
+
+            if(accept) {        // legal move
+                Eold += deltaE;
+                // sync HBDist[] and HBDcpy[]
+                switch( movetype ) {
+                    case 0:
+                        if( jp == 0 ) {
+                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                                NCDcpy[ip][m] = NCDist[ip][m];
+                            }
+                        }
+                        if( jp == 2 ) {
+                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                                NCDcpy[m][ip] = NCDist[m][ip];
+                            }
+                        }
+                        break;
+                    default:
+                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                            for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+                                NCDcpy[m][n] = NCDist[m][n];
+                                NCDcpy[n][m] = NCDist[n][m];
+                            }
+                        }
+                }
+                // neighbour list is updated in move function - only if it returns true            
+            }
+            else {              // illegal move
+                // reset HBList and HBDist
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    HBList[k][0] = HBLcpy[k][0];
+                    HBList[k][1] = HBLcpy[k][1];
+                }
+                // all legal steps are accepted → why copy NCDist[][] ? 
+                switch( movetype ) {                                // non-SAMC move: all legal moves are accepted -> why copy NCDist[][] ?
+                    case 0:
+                        if( jp == 0 ) {
+                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }
+                        }
+                        if( jp == 2 ) {
+                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }
+                        }
+                        break;
+                    default:
+                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                            for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+                                NCDist[m][n] = NCDcpy[m][n];
+                                NCDist[n][m] = NCDcpy[n][m];
+                            }
+                        }
+                }
+            }
+
+            // check bond length after every move - if this failes: abort run
+            if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
+                hd->os_log<< std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
+                std::cerr << std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
+                outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
+                this_thread::sleep_for(chrono::milliseconds(200));
+                return 0;
+            }
+            if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
+                hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl; hd->os_log.close();
+                std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl;
+                std::cerr.precision(3); std::cerr << std::fixed;
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    std::cerr << "k" << k << "\t";
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        std::cerr << NCDist[k][m] << "\t";
+                    } std::cerr << std::endl;
+                } std::cerr << std::endl;
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
+                }
+                outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
+                this_thread::sleep_for(chrono::milliseconds(200));
+
+                return 0;
+            }
+            step++;
+        }
+
+    }
+    
+    std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
+    // configuration when starting SAMC
+    outputPositions(sp, hd, hd->iniconf, Chn, 1, Eold);
 
     eBin_o = floor(((Eold-sp->EMin)/sp->BinW)-0.00001);
     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
@@ -402,150 +559,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    // move new chains to randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
-    step = 0;
-    while( true ) {
-        // end pre-SAMC movement after tStart moves and within desired energy window
-        if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
-            eBin_o = floor((Eold - sp->EMin)/sp->BinW);
-            if( eBin_o == sp->NBin) { eBin_o = sp->NBin-1; }
-            std::cout << "pre-SAMC move " << step << "\r" << std::flush;
-            break;
-        }
-
-        if( step%1000 == 0 ) {
-            std::cout << "pre-SAMC move " << step << "\r" << std::flush;
-        }
-        // HBList copy
-        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-            HBLcpy[k][0] = HBList[k][0];
-            HBLcpy[k][1] = HBList[k][1];
-        }
-        deltaE = 0.0;
-        // select move type
-        moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
-        if( moveselec < sp->WT_WIGGLE )                                                    { movetype = 0; }    // wiggle
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                                    { movetype = 1; }    // rotPhi
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )                         { movetype = 2; }    // rotPsi
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS )            { movetype = 3; }    // translation
-        else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT ) { movetype = 4; }    // rotation
-        else { 
-            hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
-            std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
-        }
-        switch( movetype ) {
-            case 0:
-                i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
-                ip = i_rand/4;                              // amino acid identifier
-                jp = i_rand%4;                              // bead
-                accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
-                break;
-            case 1:
-                ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                jp = trunc(((double)rng()/((double)rng.max()+1))*2);                                      // rotate lower or higher part
-                accept = rotPhi(sp, Chn, ip, jp, deltaE);
-                break;
-            case 2:
-                ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
-                accept = rotPsi(sp, Chn, ip, jp, deltaE);
-                break;
-            case 3:
-                ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
-                accept = translation(sp, Chn, ip, deltaE);
-                break;
-            case 4:
-                ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
-                accept = rotation(sp, Chn, ip, deltaE);
-                break;
-            default:
-                std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
-        }
-
-        if(accept) {        // legal move
-            Eold += deltaE;
-            // sync HBDist[] and HBDcpy[]
-            switch( movetype ) {
-                case 0:
-                    if( jp == 0 ) {
-                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                            NCDcpy[ip][m] = NCDist[ip][m];
-                        }
-                    }
-                    if( jp == 2 ) {
-                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                            NCDcpy[m][ip] = NCDist[m][ip];
-                        }
-                    }
-                    break;
-                default:
-                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
-                            NCDcpy[m][n] = NCDist[m][n];
-                            NCDcpy[n][m] = NCDist[n][m];
-                        }
-                    }
-            }
-            // neighbour list is updated in move function - only if it returns true            
-        }
-        else {              // illegal move
-            // reset HBList and HBDist
-            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                HBList[k][0] = HBLcpy[k][0];
-                HBList[k][1] = HBLcpy[k][1];
-            }
-            // all legal steps are accepted → why copy NCDist[][] ? 
-            switch( movetype ) {                                // non-SAMC move: all legal moves are accepted -> why copy NCDist[][] ?
-                case 0:
-                    if( jp == 0 ) {
-                        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }
-                    }
-                    if( jp == 2 ) {
-                        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }
-                    }
-                    break;
-                default:
-                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
-                            NCDist[m][n] = NCDcpy[m][n];
-                            NCDist[n][m] = NCDcpy[n][m];
-                        }
-                    }
-            }
-        }
-
-        // check bond length after every move - if this failes: abort run
-        if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
-            hd->os_log<< std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
-            std::cerr << std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
-            outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-            this_thread::sleep_for(chrono::milliseconds(200));
-            return 0;
-        }
-        if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
-            hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl; hd->os_log.close();
-            std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl;
-            std::cerr.precision(3); std::cerr << std::fixed;
-            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                std::cerr << "k" << k << "\t";
-                for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                    std::cerr << NCDist[k][m] << "\t";
-                } std::cerr << std::endl;
-            } std::cerr << std::endl;
-            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
-            }
-            outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-            this_thread::sleep_for(chrono::milliseconds(200));
-
-            return 0;
-        }
-        step++;
-    }
-    std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
-    // configuration when starting SAMC
-    outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */    
@@ -555,7 +568,7 @@ int main(int argc, char *argv[])
         for( it=0; it<sp->stepit; it++ ) {
 
             // print estimated remaining time
-            if( sp->cluster_opt==1 && step%((int)1e3) == 0 ) {
+            if( sp->cluster_opt==0 && step%((int)1e3) == 0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
@@ -971,7 +984,7 @@ int main(int argc, char *argv[])
         // Energy check
         if( (step+1)%10000 == 0 ) {
             if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
-                hd->os_log<< endl << "--- std:: ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
+                hd->os_log<< endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
                 std::cerr << endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
                 std::cerr << endl << "HBList" << endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -1139,6 +1152,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->lngEnm = "lngE_input.dat";
     hd->rrunnm = "rerun.dat";
     hd->dbposi = "AnorLondo.xyz";
+    hd->iniconf= "config_preSAMC.xyz";
     hd->hbmatr = "HBmat.dat";
     hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
@@ -1681,7 +1695,8 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
         return true;
     }
     else {
-        std::cerr << "unable to open coordinate input file '" << hd->confnm << "'" << endl;
+        std::cerr << "could not open file '" << hd->confnm << "'" << endl;
+        hd->os_log<< "could not open file '" << hd->confnm << "'" << endl;
         return false;
     }
 }

@@ -65,6 +65,7 @@ struct Header {
     std::string lngEnm;     // input file name ln g(E)
     std::string rrunnm;     // input file name rerun file input
     std::string dbposi;     // output file name debug position
+    std::string iniconf;    // output file name config created by newChain()
     std::string hbmatr;     // output file name HB matrices
     std::string reenm;      // output file name end-to-end distance distribution
     std::string tGyrnm;     // output file name tensor of gyration

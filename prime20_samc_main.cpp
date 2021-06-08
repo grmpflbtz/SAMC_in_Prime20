@@ -689,6 +689,10 @@ int main(int argc, char *argv[])
                             }
                             if( sp->t_NLUpdate==0 ) {
                                 for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
+<<<<<<< HEAD
+=======
+                                    oldBox = Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getBox();
+>>>>>>> 831727a99f63e053ffed0eb5d7a0970bea8eb94a
                                     LinkListUpdate(sp, Chn, i/4, i%4);
                                 }
                             }
@@ -828,6 +832,10 @@ int main(int argc, char *argv[])
                         }
                         if( sp->t_NLUpdate==0 ) {
                             for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
+<<<<<<< HEAD
+=======
+                                oldBox = Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getBox();
+>>>>>>> 831727a99f63e053ffed0eb5d7a0970bea8eb94a
                                 LinkListUpdate(sp, Chn, i/4, i%4);
                             }
                         }

@@ -155,6 +155,7 @@ double calc_psi(SysPara *sp, Chain Chn[], int p);                               
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
+int CheckLinkListIntegrity(SysPara *sp, Chain Chn[]);
 
 int output_memory_deallocation(SysPara *sp, Output *ot);                               // deallocating momory of Output
 
@@ -181,7 +182,7 @@ int main(int argc, char *argv[])
     bool accept, newchn, ini_overlap;                       // acceptance value of move in SAMC; construction of new chain; overlapp in inital configuration
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
     int oldBox;                                             // variables for neighbour list calculations
-    long unsigned int step, tcont;                          // time variable keeping track of # steps passed
+    long unsigned int step, tcont;                          // time variables keeping track of # steps passed
     int it, angl;
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
@@ -260,6 +261,10 @@ int main(int argc, char *argv[])
     cur_time_print(hd->os_log);
 
     // initialization of some values
+    sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
+    sp->stepit = 4*sp->N_AA*sp->N_CH;
+    sp->neighUpdate = (sp->LBOX-SW_HUGE)/sp->DISP_MAX;
+    sp->NeighListTest = 0;
     for( int i=0; i<5; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
@@ -401,6 +406,7 @@ int main(int argc, char *argv[])
         else { std::cout << "Randomizing initial configuration" << std::endl; }
 
         step = 0;
+        sp->t_NLUpdate = 0;
         while( true ) {
             // end pre-SAMC movement after tStart moves and within desired energy window
             if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
@@ -539,6 +545,7 @@ int main(int argc, char *argv[])
                 return 0;
             }
             step++;
+            sp->t_NLUpdate++;
         }
 
     }
@@ -563,6 +570,7 @@ int main(int argc, char *argv[])
                     XXXXXXXXXXXXXXXXXXXX    SAMC loop    XXXXXXXXXXXXXXXXXXXX
                     XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */    
 
+    sp->t_NLUpdate = 0;
     for( step=tcont; step<sp->T_MAX; step++ ) {
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
@@ -572,6 +580,9 @@ int main(int argc, char *argv[])
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
+            if(sp->NeighListTest==1) {
+                CheckLinkListIntegrity(sp, Chn);
+            }
             // select move type
             moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
             //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
@@ -667,12 +678,19 @@ int main(int argc, char *argv[])
                 if( Enew<sp->EMin || Enew > sp->EMax+0.00001 ) {
                     switch( movetype ) {
                         case 0:     // wiggle
+                            oldBox = Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp].getBox();
                             Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp] = BdCpy[4*ip+jp];                     // reset to old coordinates
+                            Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp].setBox(oldBox);
                             if( jp == 0 ) {
                                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; } // reset NCDist[][]
                             }
                             if( jp == 2 ) {
                                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; } // reset NCDist[][]
+                            }
+                            if( sp->t_NLUpdate==0 ) {
+                                for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
+                                    LinkListUpdate(sp, Chn, i/4, i%4);
+                                }
                             }
                             break;
                         case 3:     // translation
@@ -799,12 +817,19 @@ int main(int argc, char *argv[])
                 // Bead and neighbour list reset
                 switch( movetype ) {
                     case 0:     // wiggle
+                        oldBox = Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp].getBox();
                         Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp] = BdCpy[4*ip+jp];                         // reset old coordinates
+                        Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp].setBox(oldBox);
                         if( jp == 0 ) {
                             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }          // reset NCDist[][]
                         }
                         if( jp == 2 ) {
                             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }          // reset NCDist[][]
+                        }
+                        if( sp->t_NLUpdate==0 ) {
+                            for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
+                                LinkListUpdate(sp, Chn, i/4, i%4);
+                            }
                         }
                         break;
                     case 3:     // translation
@@ -938,6 +963,7 @@ int main(int argc, char *argv[])
                 Egrd = Eold;
                 outputPositions(sp, hd, hd->grdcnm, Chn, 0, Eold);
             }
+            sp->t_NLUpdate++;
 
             gammasum += gamma;
 
@@ -1494,8 +1520,6 @@ bool readParaInput(SysPara *sp, Header *hd)
                         read_WCon = 1; read_ConE = 1; read_ConV = 1; } }
             }
         }
-        sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
-        sp->stepit = 4*sp->N_AA*sp->N_CH;
 
         if( read_NCH  == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- N_CH not found. " << std::endl; 
@@ -2580,6 +2604,15 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                 }
             }
     }
+    // update neighbor list if enough steps passed since last update
+    if(sp->t_NLUpdate >= sp->neighUpdate) {
+        //std::cout << "mööp" << std::endl;
+        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+            for( int l=0; l<4; l++ ) {
+                LinkListUpdate(sp, Chn, k, l);
+            }
+        }
+    }
     // energy calculation
     switch(j) {
         case 0:
@@ -3662,10 +3695,27 @@ int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1)
             }
         }
         LinkListInsert(sp, Chn, i1, j1);
-        //printf("\t\tneighlist was updated:\t\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\tnewBox=%3d\n", i1, j1, i1*4+j1, oldBox, AmAc[i1].Bd[j1].getBox());
     }
-    else
-        //printf("\t\tneighlist wasn't updated\tchn[%d].Bd[%d]\tindex=%3d\toldBox=%3d\n", i1, j1, i1*4+j1, oldBox);
+    sp->t_NLUpdate = 0;     // reset counter of last neighbor list update
+    return 0;
+}
+// check integrity of LinkedList
+int CheckLinkListIntegrity(SysPara *sp, Chain Chn[])
+{
+    int index;
+
+    for(int i=0; i<sp->NBOX*sp->NBOX*sp->NBOX; i++) {
+        index = neighHead[i];
+        while( index != -1 ) {
+            if(i != Chn[(index/4)/sp->N_AA].AmAc[(index/4)%sp->N_AA].Bd[index%4].getBox() ) {
+                std::cout << "OMG: getBox() does not fit neighList entry: index=" << index << "   getBox()=" << Chn[(index/4)/sp->N_AA].AmAc[(index/4)%sp->N_AA].Bd[index%4].getBox() << "   neighList=" << i << std::flush;
+                std::cout << std::endl;
+            }
+
+            index = neighList[index];
+        }
+    }
+
     return 0;
 }
 

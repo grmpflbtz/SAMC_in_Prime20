@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
                 }
             }
 
-            if( step%1000 == 0 ) {
+            if( (sp->cluster_opt==0) && (step%1000 == 0) ) {
                 std::cout << "pre-SAMC move " << step << "\r" << std::flush;
             }
             // HBList copy

@@ -29,6 +29,9 @@ struct SysPara {
 
     int NBOX;
     double LBOX;            // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
+    int neighUpdate;        // update step for neighbor list
+    int t_NLUpdate;         // steps passed since last neighbor list update
+    int NeighListTest;      // tests integrity of LinkList and NeighHead every step [on/off]
 
     int WT_WIGGLE;          // weight wiggle
     int WT_PHI;             // weight rotPhi
@@ -44,7 +47,7 @@ struct SysPara {
     double DTRN_MAX;        // maximum chain translation
     double DROT_MAX;        // maximum angle chain rotation
 
-    int cluster_opt;        // cluster optimization on/off
+    int cluster_opt;        // cluster optimization [on/off]
 
     bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables

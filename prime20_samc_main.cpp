@@ -2549,7 +2549,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                 HBList[h*sp->N_AA+i][0] = -1;
                 deltaE += 1.0;
             }
-            if( i%sp->N_AA != 0 ) {
+            if( i != 0 ) {
                 if( HBList[h*sp->N_AA+i-1][1] > -1 ) {
                     HBC_broken = HBList[h*sp->N_AA+i-1][1];
                     HBList[HBList[h*sp->N_AA+i-1][1]][0] = -1;
@@ -2557,7 +2557,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                     deltaE += 1.0;
                 }
             }
-            if( (i+1)%sp->N_AA == 0 ) {
+            if( (i+1) == sp->N_AA ) {
                 if( HBList[h*sp->N_AA+i][1] > -1) {
                     HBEnd_broken = HBList[h*sp->N_AA+i][1];
                     HBList[HBList[h*sp->N_AA+i][1]][0] = -1;
@@ -2587,7 +2587,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                 HBList[h*sp->N_AA+i][1] = -1;
                 deltaE += 1.0;
             }
-            if( (i+1)%sp->N_AA != 0 ) {
+            if( (i+1) != sp->N_AA ) {
                 if( HBList[h*sp->N_AA+i+1][0] > -1 ) {
                     HBN_broken = HBList[h*sp->N_AA+i+1][0];
                     HBList[HBList[h*sp->N_AA+i+1][0]][1] = -1;
@@ -2595,7 +2595,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                     deltaE += 1.0;
                 }
             }
-            if( i%sp->N_AA == 0 ) {
+            if( i == 0 ) {
                 if( HBList[h*sp->N_AA+i][0] > -1 ) {
                     HBEnd_broken = HBList[h*sp->N_AA+i][0];
                     HBList[HBList[h*sp->N_AA+i][0]][1] = -1;
@@ -2625,7 +2625,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
                 }
                 if( HBcheck(sp, Chn, h*sp->N_AA+i, k) ) deltaE -= 1.0;
                 if(i>0) { if( HBcheck(sp, Chn, k, h*sp->N_AA+i-1) ) deltaE -= 1.0; }
-                if((i+1)%sp->N_AA == 0) { if(HBcheck(sp, Chn, k, h*sp->N_AA+i)) deltaE -= 1.0; }
+                if((i+1) == sp->N_AA) { if(HBcheck(sp, Chn, k, h*sp->N_AA+i)) deltaE -= 1.0; }
             }
             break;
         case 1:
@@ -2675,7 +2675,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
             }
         }
         if( HBC_broken > -1 ) {
-            for( int k=0; k<sp->N_AA; k++ ) {
+            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                 if( HBcheck(sp, Chn, HBC_broken, k) ) deltaE -= 1.0;
             }
         }
@@ -2686,7 +2686,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
             if( HBcheck(sp, Chn, 0, k) ) deltaE -= 1.0;
         }
         if( HBEnd_broken > -1 ) {
-            if( HBEnd_broken != HBList[h*sp->N_CH][0] ) {
+            if( HBEnd_broken != HBList[h*sp->N_AA][0] ) {
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     if( HBcheck(sp, Chn, k, HBEnd_broken) ) deltaE -= 1.0;
                 }
@@ -2698,7 +2698,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
             if( HBcheck(sp, Chn, k, sp->N_AA-1) ) deltaE -= 1.0;
         }
         if( HBEnd_broken > -1 ) {
-            if( HBEnd_broken != HBList[h*sp->N_CH+sp->N_AA-1][1] ) {
+            if( HBEnd_broken != HBList[h*sp->N_AA+sp->N_AA-1][1] ) {
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     if( HBcheck(sp, Chn, HBEnd_broken, k) ) deltaE -= 1.0;
                 }
@@ -2820,8 +2820,25 @@ bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
             HBList[i][1] = -1;
             dEhb += 1.0;
         }
-        // ATTENTION: maybe extra conditions have to be checked like HBList[i1][0] or HBList[i1-1][1] with all possible partners
     }
+    // two cases not fully covered by the loop above: HBList[i1][0] and HBList[i1-1][1] with all possible partners
+    if( HBList[i1][0] > -1 ) {
+        BrokenHB[++nBHB][0] = i1;
+        BrokenHB[nBHB][1] = HBList[i1][0];
+        HBList[HBList[i1][0]][1] = -1;
+        HBList[i1][0] = -1;
+        dEhb += 1.0;
+    }
+    if( i1%sypa->N_AA != 0 ) {
+        if( HBList[i1-1][1] > -1) {
+            BrokenHB[++nBHB][1] = i1-1;
+            BrokenHB[nBHB][0] = HBList[i1-1][1];
+            HBList[HBList[i1-1][1]][0] = -1;
+            HBList[i1-1][1] = -1;
+            dEhb += 1.0;
+        }
+    }
+
     // close new HB
     for( int m=sp; m<epHB; m++ ) {
         for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
@@ -2844,7 +2861,7 @@ bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
             if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
         }
     }
-    // ATTENTION: extra conditions and situations would have to be applied here as well
+    // two special cases (HBList[i1][0] and HBList[i1-1][1]) from above are covered in loop below
     if( nBHB >= 0 ) {       // previously broken HB can rebond
         for( int i=0; i<nBHB+1; i++ ) {
             for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
@@ -2975,7 +2992,23 @@ bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
             HBList[i][1] = -1;
             dEhb += 1.0;
         }
-        // ATTENTION: maybe extra conditions have to be checked like HBList[i1][0] or HBList[i1-1][1] with all possible partners
+    }
+    // two cases not fully covered by the loop above: HBList[i1][1] and HBList[i1+1][0] with all possible partners
+    if( HBList[i1][1] > -1 ) {
+        BrokenHB[++nBHB][1] = i1;
+        BrokenHB[nBHB][0] = HBList[i1][1];
+        HBList[HBList[i1][1]][0] = -1;
+        HBList[i1][1] = -1;
+        dEhb += 1.0;
+    }
+    if( (i1+1)%sypa->N_AA != 0 ) {
+        if( HBList[i1+1][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i1+1;
+            BrokenHB[nBHB][1] = HBList[i1+1][0];
+            HBList[HBList[i1+1][0]][1] = -1;
+            HBList[i1+1][0] = -1;
+            dEhb += 1.0;
+        }
     }
     // close new HB
     for( int m=spHB; m<ep; m++ ) {
@@ -2999,7 +3032,7 @@ bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
             if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
         }
     }
-    // ATTENTION: extra conditions and situations would have to be applied here as well
+    // two special cases (HBList[i1][1] and HBList[i1+1][0]) from above are covered in loop below
     if( nBHB >= 0 ) {       // previously broken HB can rebond
         for( int i=0; i<nBHB+1; i++ ) {
             for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {

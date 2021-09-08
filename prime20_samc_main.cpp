@@ -2444,8 +2444,8 @@ bool acceptance(double lngEold, double lngEnew)
 {
     //uniform_real_distribution<double> distribution(0,1);
     //double MCrand = distribution(rng);
-    double MCrand = (double)rng()/(double)rng.max();
     if( lngEnew <= lngEold ) return true;
+    double MCrand = (double)rng()/(double)rng.max();
     if( exp(lngEold-lngEnew) > MCrand ) return true;
     return false;
 }

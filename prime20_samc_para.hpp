@@ -74,6 +74,7 @@ const double SQZ3 = 3.2057585;	//0.87829*(CO+N)/2
 const double SQZ4 = 2.64;	    //0.8*N
 const double SQZ5 = 3.0852;	    //0.7713*CO
 
+
 //Masses of beads. Not an original PRIME20 parameter!
 const double MASS_N = 15.0;		//Backbone NH
 const double MASS_C = 13.0;		//Backbone C(alpha)H
@@ -95,5 +96,11 @@ const double DiaSC(AmiAc AmAci, AmiAc AmAcj);
  * comparing chn[ha].AmiAc[ia].Bd[ja] with chn[hb].AmiAc[ib].Bd[jb]
  */
 double DiaSQ(Chain chn[], int ha, int ia, int ja, int hb, int ib, int jb);
+
+//Diameters squared matrix
+extern std::vector<std::vector<double>> DiaSQValues;
+
+// setup squared diameters values of matrix
+int DiaSQValuesSetup(Chain chn[], int naa, int nch);
 
 #endif

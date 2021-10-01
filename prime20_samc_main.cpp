@@ -85,14 +85,17 @@ using namespace std;
 //XXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   SIMULATION PARAMETERS - GLOBAL VARIABLES   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-int *neighHead;
-int *neighList;
+std::vector<int> neighHead;
+std::vector<int> neighList;
 
-int **HBList;
-int **HBLcpy;
-
-double **NCDist;
-double **NCDcpy;
+std::vector<std::vector<int>> HBList;
+std::vector<std::vector<int>> HBLcpy;
+std::vector<std::vector<int>> NCDist;
+std::vector<std::vector<int>> NCDcpy;
+//int **HBList;
+//int **HBLcpy;
+//double **NCDist;
+//double **NCDcpy;
 
 mt19937 rng(time(NULL));                // constructor for random number generator
 //mt19937 rng(44);                        // debug
@@ -208,17 +211,21 @@ int main(int argc, char *argv[])
     sim_parameter_print(sp, hd->os_log);
 
 
-    neighHead = new int[sp->NBOX*sp->NBOX*sp->NBOX];
-    neighList = new int[4*sp->N_AA*sp->N_CH];
-    HBList = new int*[sp->N_CH*sp->N_AA];
-    HBLcpy = new int*[sp->N_CH*sp->N_AA];
-    NCDist = new double*[sp->N_CH*sp->N_AA];
-    NCDcpy = new double*[sp->N_CH*sp->N_AA];
-    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) { 
-        HBList[i] = new int[2];
-        HBLcpy[i] = new int[2];
-        NCDist[i] = new double[sp->N_CH*sp->N_AA];
-        NCDcpy[i] = new double[sp->N_CH*sp->N_AA];
+    for(int i=0; i<sp->NBOX*sp->NBOX*sp->NBOX; i++) {
+        neighHead.push_back(-1);
+    }
+    for(int i=0; i<4*sp->N_AA*sp->N_CH; i++) {
+        neighList.push_back(-1);
+    }
+    for(int i=0; i<sp->N_CH*sp->N_AA; i++) {
+        std::vector<int> add;
+        for( int j=0; j<2; j++ ) {
+            add.push_back(-1);
+        }
+        HBList.push_back(add);
+        HBLcpy.push_back(add);
+        NCDist.push_back(add);
+        NCDcpy.push_back(add);
     }
 
     Chn = new Chain[sp->N_CH];
@@ -254,8 +261,6 @@ int main(int argc, char *argv[])
         }
     ot->conf_n = new int[sp->ConfigE.size()];
     ot->conf_wt = new int[sp->ConfigE.size()];
-
-    fill_n(neighHead, sp->NBOX*sp->NBOX*sp->NBOX, -1), fill_n(neighList, 4*sp->N_AA*sp->N_CH, -1);
 
     cur_time_print(std::cout);
     cur_time_print(hd->os_log);
@@ -363,6 +368,7 @@ int main(int argc, char *argv[])
         }
         else { std::cout << "complete" << std::endl; }
     }
+    DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
 
 
     /*std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;*/
@@ -370,8 +376,6 @@ int main(int argc, char *argv[])
 
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
-        HBList[i][0] = -1;  HBLcpy[i][0] = -1;
-        HBList[i][1] = -1;  HBLcpy[i][1] = -1;
         for(int j = 0; j < sp->N_CH*sp->N_AA; j++) {
             if( (i/sp->N_AA != j/sp->N_AA) ||  ((i/sp->N_AA == j/sp->N_AA) && (abs(i-j) > 3)) ) {
                 std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0], Chn[j/sp->N_AA].AmAc[j%sp->N_AA].Bd[2]);
@@ -382,8 +386,6 @@ int main(int argc, char *argv[])
                     continue;
                 }
             }
-            NCDist[i][j] = -1;
-            NCDcpy[i][j] = -1;
         }
     }
     // first energy calculation - no HB, yet
@@ -1039,19 +1041,6 @@ int main(int argc, char *argv[])
     hd->os_log.close();
 
     output_memory_deallocation(sp, ot);
-
-    delete[] neighHead;
-    delete[] neighList;
-    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) { 
-        delete[] HBList[i];
-        delete[] HBLcpy[i];
-        delete[] NCDist[i];
-        delete[] NCDcpy[i];
-    }
-    delete[] HBList;
-    delete[] HBLcpy;
-    delete[] NCDist;
-    delete[] NCDcpy;
 
     delete[] Chn;
     delete[] BdCpy;
@@ -2304,8 +2293,11 @@ double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, in
                 if( index >= sp*4 && index < ep*4 ) {
                     std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[h1].AmAc[i1].Bd[j1], Chn[index/(4*sypa->N_AA)].AmAc[(index/4)%sypa->N_AA].Bd[index%4]);
                     dist2 = dotPro(distV, distV);
-                    if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*sypa->N_AA), (index/4)%sypa->N_AA, index%4) ) { 
+                    /*if( dist2 < DiaSQ(Chn, h1, i1, j1, index/(4*sypa->N_AA), (index/4)%sypa->N_AA, index%4) ) { 
                         //std::cerr << "overlapp: C" << h1 << "A" << i1 << "B" << j1 << " - C" << index/(4*sypa->N_AA) << "A" << (index/4)%sypa->N_AA << "B" << index%4 << std::endl;
+                        return -1.0; 
+                    }*/
+                    if( dist2 < DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] ) { 
                         return -1.0; 
                     }
                 }

@@ -869,3 +869,27 @@ double DiaSQ(Chain chn[], int ha, int ia, int ja, int hb, int ib, int jb)
 	}
 	return 0.25*(d1+d2)*(d1+d2);
 }
+
+
+std::vector<std::vector<double>> DiaSQValues;
+// setup squared diameters values of matrix
+int DiaSQValuesSetup(Chain chn[], int naa, int nch)
+{
+	double value;
+
+
+	std::vector<double> dist;
+	for( int i=0; i<4*naa*nch; i++ ) {
+		for( int j=0; j<4*naa*nch; j++ ) {
+			value = DiaSQ(chn, i/(4*naa), (i/4)%naa, i%4, j/(4*naa), (j/4)%naa, j%4);
+			dist.push_back(value);
+			//std::cout << i << "-" << j << ":" << value;
+			//std::cout << "  " << std::flush;
+		}
+		//std::cout << std::endl;
+		DiaSQValues.push_back(dist);
+		dist.clear();
+	}
+
+	return 0;
+}

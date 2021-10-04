@@ -90,15 +90,15 @@ std::vector<int> neighList;
 
 std::vector<std::vector<int>> HBList;
 std::vector<std::vector<int>> HBLcpy;
-std::vector<std::vector<int>> NCDist;
-std::vector<std::vector<int>> NCDcpy;
+std::vector<std::vector<double>> NCDist;
+std::vector<std::vector<double>> NCDcpy;
 //int **HBList;
 //int **HBLcpy;
 //double **NCDist;
 //double **NCDcpy;
 
-mt19937 rng(time(NULL));                // constructor for random number generator
-//mt19937 rng(44);                        // debug
+//mt19937 rng(time(NULL));                // constructor for random number generator
+mt19937 rng(44);                        // debug
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -218,14 +218,18 @@ int main(int argc, char *argv[])
         neighList.push_back(-1);
     }
     for(int i=0; i<sp->N_CH*sp->N_AA; i++) {
-        std::vector<int> add;
+        std::vector<int> addint;
+        std::vector<double> adddouble;
         for( int j=0; j<2; j++ ) {
-            add.push_back(-1);
+            addint.push_back(-1);
         }
-        HBList.push_back(add);
-        HBLcpy.push_back(add);
-        NCDist.push_back(add);
-        NCDcpy.push_back(add);
+        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+            adddouble.push_back(-1.0);
+        }
+        HBList.push_back(addint);
+        HBLcpy.push_back(addint);
+        NCDist.push_back(adddouble);
+        NCDcpy.push_back(adddouble);
     }
 
     Chn = new Chain[sp->N_CH];
@@ -361,6 +365,8 @@ int main(int argc, char *argv[])
                 }
             }
         }
+        // setup DiaSQValues Matrix
+        DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
         newchn = true;
         if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
             std::cout << std::endl << "--- WARNING ---\toverlap in constructed configuration" << std::endl;
@@ -368,7 +374,6 @@ int main(int argc, char *argv[])
         }
         else { std::cout << "complete" << std::endl; }
     }
-    DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
 
 
     /*std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;*/
@@ -580,6 +585,19 @@ int main(int argc, char *argv[])
             // print estimated remaining time
             if( sp->cluster_opt==0 && step%((int)1e3) == 0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
+            }
+
+            for(int i=0; i<sp->N_AA; i++) {
+                for(int j=0; j<2; j++) {
+                    if((HBList[i][j] >= sp->N_AA) || (HBList[i][j] < -1)) {
+                        std::cout << "HBList fuckup incoming: i=" << i << ", j=" << j;
+                        std::cout << std::endl;
+                    }
+                }
+            }
+
+            if(step == 0 && it == 5) {
+                std::cout << "oi" << std::endl;
             }
 
             if(sp->NeighListTest==1) {
@@ -1703,6 +1721,10 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
                 LinkListInsert(sp, Chn, i, j);
             }
         }
+
+        // setup DiaSQValues Matrix
+        DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
+
         input.close();
         sp->tStart = 0;
         return true;

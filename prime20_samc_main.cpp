@@ -2722,6 +2722,185 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
 
     return true;
 }
+bool Pivot(SysPara *sypa, Chain Chn[], int pivan, int res, int part, double &deltaE)
+{
+    Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
+    double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
+    double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
+    double rotMtrx[3][3];                                   // rotation matrix
+    double n[3], dVec[3], newpos[3], com[3], shift[3];
+    int BrokenHB[sypa->N_AA*sypa->N_CH][2], nBHB;           // list of broken HB
+    int sp, ep, spHB1, spHB2, epHB1, epHB2;                 // start and end of rotated chain segment
+
+    // calculate Eold
+    if(pivan == 0) { // rotate Phi
+        sp = (part == 0) ? ((res/sypa->N_AA)*sypa->N_AA):res;                 // identify start of rotated chain segment
+        ep = (part == 0) ? (res):(((res/sypa->N_AA)+1)*sypa->N_AA);           // identify end of rotated chain segment
+    }
+    else { // rotate Psi
+        sp = (part == 0) ? ((res/sypa->N_AA)*sypa->N_AA):(res+1);             // identify start of rotated chain segment
+        ep = (part == 0) ? (res+1):(((res/sypa->N_AA)+1)*sypa->N_AA);         // identify end of rotated chain segment
+    }
+    Eold = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1);
+    // copy relevant part of the chain
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            Bdcpy[i*4+j] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j];
+        }
+    }
+
+    angle = sypa->DPIV_MAX*( ((double)rng()/(double)rng.max())*2 - 1. );
+    cos_a = cos(angle); sin_a = sin(angle);
+    if(pivan == 0) {
+        std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[0], Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1]);  nsqrt = absVec(n);
+    } else {
+        std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1], Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[2]);  nsqrt = absVec(n);
+    }
+    n[0] /= nsqrt;  n[1] /= nsqrt;  n[2] /= nsqrt;
+    if( part==0 ) { n[0] *= -1; n[1] *= -1; n[2] *= -1; }     // -n for low? is this nessessary to keep rotation angle distribution uniform?
+    rotMtrx[0][0] = cos_a + n[0]*n[0]*(1-cos_a);
+    rotMtrx[0][1] = n[0]*n[1]*(1-cos_a) - n[2]*sin_a;
+    rotMtrx[0][2] = n[0]*n[2]*(1-cos_a) + n[1]*sin_a;
+    rotMtrx[1][0] = n[1]*n[0]*(1-cos_a) + n[2]*sin_a;
+    rotMtrx[1][1] = cos_a + n[1]*n[1]*(1-cos_a);
+    rotMtrx[1][2] = n[1]*n[2]*(1-cos_a) - n[0]*sin_a;
+    rotMtrx[2][0] = n[2]*n[0]*(1-cos_a) - n[1]*sin_a;
+    rotMtrx[2][1] = n[2]*n[1]*(1-cos_a) + n[0]*sin_a;
+    rotMtrx[2][2] = cos_a + n[2]*n[2]*(1-cos_a);
+
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            for( int k=0; k<3; k++ ) {
+                dVec[k] = Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getR(k) - Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1].getR(k) + sypa->L*(Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].getBC(k) - Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1].getBC(k) );
+            }
+            for( int k=0; k<3; k++ ) {
+                // periodic boundary conditions here and in high.
+                newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[0].getR(k);
+                Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setBC( k, Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[0].getBC(k) + floor(newpos[k]/sypa->L) );
+                newpos[k] = newpos[k] - sypa->L*floor(newpos[k]/sypa->L);
+            }
+            Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
+            
+            // overlapp check
+            if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, sp, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ep, sypa->N_CH*sypa->N_AA, 0) == -1 ) {
+                for( int k=(i/sypa->N_AA)*sypa->N_AA; k<i+1; k++ ) {
+                    for( int m=0; m<4; m++ ) {
+                        Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    
+    // energy calculation
+    // break old HB
+    nBHB = -1;
+    dEhb = 0.0;
+    
+    //spHB = (high == 0) ? sp : (sp+1);
+    //epHB = (high == 0) ? (ep+1) : ep;
+
+    spHB1 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res;
+    spHB2 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res+1;
+    epHB1 = (part == 0) ? res+1 : (res/sypa->N_AA +1)*sypa->N_AA;
+    epHB2 = (part == 0) ? res : (res/sypa->N_AA +1)*sypa->N_AA;
+
+    for( int i=spHB1; i<epHB1; i++ ) {
+    //for( int i=sp; i<epHB; i++ ) {
+        if( (HBList[i][0] < spHB2 || HBList[i][0] >= epHB2) && HBList[i][0] > -1 ) {
+            BrokenHB[++nBHB][0] = i;
+            BrokenHB[nBHB][1] = HBList[i][0];
+            HBList[HBList[i][0]][1] = -1;
+            HBList[i][0] = -1;
+            dEhb += 1.0;
+        }
+        if( (HBList[i][1] < spHB2 || HBList[i][1] >= epHB2) && HBList[i][1] > -1 ) {
+            BrokenHB[++nBHB][1] = i;
+            BrokenHB[nBHB][0] = HBList[i][1];
+            HBList[HBList[i][1]][0] = -1;
+            HBList[i][1] = -1;
+            dEhb += 1.0;
+        }
+    }
+    // two cases not fully covered by the loop above: HBList[i1][0] and HBList[i1-1][1] with all possible partners
+    if(pivan==0) {
+        if( HBList[res][0] > -1 ) {
+            BrokenHB[++nBHB][0] = res;
+            BrokenHB[nBHB][1] = HBList[res][0];
+            HBList[HBList[res][0]][1] = -1;
+            HBList[res][0] = -1;
+            dEhb += 1.0;
+        }
+        if( res%sypa->N_AA != 0 ) {
+            if( HBList[res-1][1] > -1) {
+                BrokenHB[++nBHB][1] = res-1;
+                BrokenHB[nBHB][0] = HBList[res-1][1];
+                HBList[HBList[res-1][1]][0] = -1;
+                HBList[res-1][1] = -1;
+                dEhb += 1.0;
+            }
+        }
+    } else {
+        if( HBList[res][1] > -1 ) {
+            BrokenHB[++nBHB][1] = res;
+            BrokenHB[nBHB][0] = HBList[res][1];
+            HBList[HBList[res][1]][0] = -1;
+            HBList[res][1] = -1;
+            dEhb += 1.0;
+        }
+        if( (res+1)%sypa->N_AA != 0 ) {
+            if( HBList[res+1][0] > -1 ) {
+                BrokenHB[++nBHB][0] = res+1;
+                BrokenHB[nBHB][1] = HBList[res+1][0];
+                HBList[HBList[res+1][0]][1] = -1;
+                HBList[res+1][0] = -1;
+                dEhb += 1.0;
+            }
+        }
+    }
+
+    // close new HB
+    for( int m=spHB1; m<epHB1; m++ ) {
+        for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
+            if( n >= spHB2 && n < epHB2 ) continue;
+            if( (m/sypa->N_AA != n/sypa->N_AA) || (( m/sypa->N_AA == n/sypa->N_AA) && (abs(m-n) > 3)) ) {
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[0], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[2]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
+                else                        { NCDist[m][n] = -1; }
+                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[2], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[0]);
+                distabs = dotPro(dVec, dVec);
+                if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
+                else                        { NCDist[n][m] = -1; }
+            }
+            else {
+                NCDist[m][n] = -1;
+                NCDist[n][m] = -1;
+            }
+            if(HBcheck(sypa, Chn, m, n)) dEhb -= 1.0;
+            if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
+        }
+    }
+    // two special cases (HBList[i1][0] and HBList[i1-1][1]) from above are covered in loop below
+    if( nBHB >= 0 ) {       // previously broken HB can rebond
+        for( int i=0; i<nBHB+1; i++ ) {
+            for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
+                if(HBcheck(sypa, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                if(HBcheck(sypa, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+            }
+        }
+    }
+    for( int i=sp; i<ep; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            LinkListUpdate(sypa, Chn, i, j);
+        }
+    }
+    // SC interactions
+    deltaE = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
+
+    return true;
+}
 // rotation around N-Ca axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
 bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
 {

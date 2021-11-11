@@ -42,6 +42,7 @@ struct SysPara {
     int WT_ROSENN;
     // movement restraints
     double DISP_MAX;        // maximum local displacement
+    double DPIV_MAX;        // maximum angle pivot rotation
     double DPHI_MAX;        // maximum angle phi rotation
     double DPSI_MAX;        // maximum angle psi rotation
     double DTRN_MAX;        // maximum chain translation

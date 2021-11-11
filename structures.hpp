@@ -34,8 +34,7 @@ struct SysPara {
     int NeighListTest;      // tests integrity of LinkList and NeighHead every step [on/off]
 
     int WT_WIGGLE;          // weight wiggle
-    int WT_PHI;             // weight rotPhi
-    int WT_PSI;             // weight rotPsi
+    int WT_PIVOT;           // weight pivot moves
     int WT_TRANS;           // weight translation
     int WT_ROT;             // weight rotation 
     int WT_ROSENC;
@@ -43,8 +42,6 @@ struct SysPara {
     // movement restraints
     double DISP_MAX;        // maximum local displacement
     double DPIV_MAX;        // maximum angle pivot rotation
-    double DPHI_MAX;        // maximum angle phi rotation
-    double DPSI_MAX;        // maximum angle psi rotation
     double DTRN_MAX;        // maximum chain translation
     double DROT_MAX;        // maximum angle chain rotation
 

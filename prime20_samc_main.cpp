@@ -141,7 +141,8 @@ double E_check(SysPara *sp, Chain Chn[]);                                       
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
 
 bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
-bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around N_AA-Ca axis of i1-th amino acid
+bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &deltaE);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
+bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around N-Ca axis of i1-th amino acid
 bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE);              // rotation around Ca-C axis of i1-th amino acid
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
 bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
@@ -274,7 +275,7 @@ int main(int argc, char *argv[])
     sp->stepit = 4*sp->N_AA*sp->N_CH;
     sp->neighUpdate = (sp->LBOX-SW_HUGE)/sp->DISP_MAX;
     sp->NeighListTest = 0;
-    for( int i=0; i<5; i++ ) {
+    for( int i=0; i<4; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
     }
@@ -434,12 +435,11 @@ int main(int argc, char *argv[])
             }
             deltaE = 0.0;
             // select move type
-            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
-            if( moveselec < sp->WT_WIGGLE )                                                    { movetype = 0; }    // wiggle
-            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI )                                    { movetype = 1; }    // rotPhi
-            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI )                         { movetype = 2; }    // rotPsi
-            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS )            { movetype = 3; }    // translation
-            else if( moveselec < sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT ) { movetype = 4; }    // rotation
+            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
+            if( moveselec < sp->WT_WIGGLE )                                           { movetype = 0; }    // wiggle
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PIVOT )                         { movetype = 1; }    // pivot
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PIVOT+sp->WT_TRANS )            { movetype = 2; }    // translation
+            else if( moveselec < sp->WT_WIGGLE+sp->WT_PIVOT+sp->WT_TRANS+sp->WT_ROT ) { movetype = 3; }    // rotation
             else { 
                 hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
                 std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
@@ -453,19 +453,14 @@ int main(int argc, char *argv[])
                     break;
                 case 1:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                                      // rotate lower or higher part
-                    accept = rotPhi(sp, Chn, ip, jp, deltaE);
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
+                    accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
-                    accept = rotPsi(sp, Chn, ip, jp, deltaE);
-                    break;
-                case 3:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                     accept = translation(sp, Chn, ip, deltaE);
                     break;
-                case 4:
+                case 3:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                     accept = rotation(sp, Chn, ip, deltaE);
                     break;
@@ -476,26 +471,25 @@ int main(int argc, char *argv[])
             if(accept) {        // legal move
                 Eold += deltaE;
                 // sync HBDist[] and HBDcpy[]
-                switch( movetype ) {
-                    case 0:
-                        if( jp == 0 ) {
-                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                                NCDcpy[ip][m] = NCDist[ip][m];
-                            }
-                        }
-                        if( jp == 2 ) {
-                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                                NCDcpy[m][ip] = NCDist[m][ip];
-                            }
-                        }
-                        break;
-                    default:
+                if( movetype == 0 ) {
+                    if( jp == 0 ) {
                         for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                            for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
-                                NCDcpy[m][n] = NCDist[m][n];
-                                NCDcpy[n][m] = NCDist[n][m];
-                            }
+                            NCDcpy[ip][m] = NCDist[ip][m];
                         }
+                    }
+                    if( jp == 2 ) {
+                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                            NCDcpy[m][ip] = NCDist[m][ip];
+                        }
+                    }
+                }
+                else{
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+                            NCDcpy[m][n] = NCDist[m][n];
+                            NCDcpy[n][m] = NCDist[n][m];
+                        }
+                    }
                 }
                 // neighbour list is updated in move function - only if it returns true            
             }
@@ -506,22 +500,21 @@ int main(int argc, char *argv[])
                     HBList[k][1] = HBLcpy[k][1];
                 }
                 // all legal steps are accepted → why copy NCDist[][] ? 
-                switch( movetype ) {                                // non-SAMC move: all legal moves are accepted -> why copy NCDist[][] ?
-                    case 0:
-                        if( jp == 0 ) {
-                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }
+                if( movetype==0 ) {
+                    if( jp == 0 ) {
+                        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[ip][k] = NCDcpy[ip][k]; }
+                    }
+                    if( jp == 2 ) {
+                        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }
+                    }
+                }
+                else {
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+                            NCDist[m][n] = NCDcpy[m][n];
+                            NCDist[n][m] = NCDcpy[n][m];
                         }
-                        if( jp == 2 ) {
-                            for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) { NCDist[k][ip] = NCDcpy[k][ip]; }
-                        }
-                        break;
-                    default:
-                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                            for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
-                                NCDist[m][n] = NCDcpy[m][n];
-                                NCDist[n][m] = NCDcpy[n][m];
-                            }
-                        }
+                    }
                 }
             }
 
@@ -562,14 +555,16 @@ int main(int argc, char *argv[])
     outputPositions(sp, hd, hd->iniconf, Chn, 1, Eold);
 
     eBin_o = floor(((Eold-sp->EMin)/sp->BinW)-0.00001);
-    for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-        if( i%sp->N_AA != 0 ) {
-            angl = floor(calc_phi(sp, Chn, i) + 180);
-            ot->dihePhi[eBin_o][i][angl] += 1;
-        }
-        if( i%sp->N_AA != (sp->N_AA-1) ) {
-            angl = floor(calc_psi(sp, Chn, i) + 180);
-            ot->dihePsi[eBin_o][i][angl] += 1;
+    if(sp->dihedral) {
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            if( i%sp->N_AA != 0 ) {
+                angl = floor(calc_phi(sp, Chn, i) + 180);
+                ot->dihePhi[eBin_o][i][angl] += 1;
+            }
+            if( i%sp->N_AA != (sp->N_AA-1) ) {
+                angl = floor(calc_psi(sp, Chn, i) + 180);
+                ot->dihePsi[eBin_o][i][angl] += 1;
+            }
         }
     }
 
@@ -604,13 +599,12 @@ int main(int argc, char *argv[])
                 CheckLinkListIntegrity(sp, Chn);
             }
             // select move type
-            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS + sp->WT_ROT));
+            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
             //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
-            if( moveselec < sp->WT_WIGGLE )                                                      { movetype = 0; }  // wiggle
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI) )                                    { movetype = 1; }  // rotPhi
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI) )                         { movetype = 2; }  // rotPsi
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS) )            { movetype = 3; }  // translation
-            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PHI+sp->WT_PSI+sp->WT_TRANS+sp->WT_ROT) ) { movetype = 4; }  // rotation
+            if( moveselec < sp->WT_WIGGLE )                                             { movetype = 0; }  // wiggle
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PIVOT) )                         { movetype = 1; }  // pivot
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PIVOT+sp->WT_TRANS) )            { movetype = 2; }  // translation
+            else if( moveselec < (sp->WT_WIGGLE+sp->WT_PIVOT+sp->WT_TRANS+sp->WT_ROT) ) { movetype = 3; }  // rotation
             else { 
                 hd->os_log<< std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; hd->os_log.close();
                 std::cerr << std::endl << "--- ERROR ---\tno movetype was selected" << std::endl; return 0; 
@@ -632,45 +626,24 @@ int main(int argc, char *argv[])
                     break;
                 case 1:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
-                    switch( jp ) {
-                        case 0:
-                            for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
-                                for( int j=0; j<4; j++ ) {
-                                    BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
-                                }
+                    jp = trunc(((double)rng()/((double)rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
+                    if( jp%2 == 0) {
+                        for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
                             }
-                            break;
-                        case 1:
-                            for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
-                                for( int j=0; j<4; j++ ) {
-                                    BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
-                                }
-                            }
+                        }
                     }
-                    accept = rotPhi(sp, Chn, ip, jp, deltaE);
+                    else {
+                        for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
+                            }
+                        }
+                    }
+                    accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*2);                    // rotate lower or higher part
-                    switch( jp ) {
-                        case 0:
-                            for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
-                                for( int j=0; j<4; j++ ) {
-                                    BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
-                                }
-                            }
-                            break;
-                        case 1:
-                            for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
-                                for( int j=0; j<4; j++ ) {
-                                    BdCpy[i*4+j] = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j];
-                                }
-                            }
-                    }
-                    accept = rotPsi(sp, Chn, ip, jp, deltaE);
-                    break;
-                case 3:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                     for( int i=0; i<sp->N_AA; i++ ) {
                         for( int j=0; j<4; j++ ) {
@@ -679,7 +652,7 @@ int main(int argc, char *argv[])
                     }
                     accept = translation(sp, Chn, ip, deltaE);
                     break;
-                case 4:
+                case 3:
                     ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
                     for( int i=0; i<sp->N_AA; i++ ) {
                         for( int j=0; j<4; j++ ) {
@@ -713,7 +686,41 @@ int main(int argc, char *argv[])
                                 }
                             }
                             break;
-                        case 3:     // translation
+                        case 1:     // pivot
+                            if( jp%2 == 0 ) {
+                                for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
+                                    for( int j=0; j<4; j++ ) {
+                                        oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
+                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
+                                        LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
+                                    }
+                                    for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                          // reset NCDist[][]
+                                        if( j<(ip/sp->N_AA)*sp->N_AA || j>ip-1 ) {
+                                            NCDist[i][j] = NCDcpy[i][j];
+                                            NCDist[j][i] = NCDcpy[j][i];
+                                        }
+                                    }
+                                }
+                            }
+                            else {
+                                for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
+                                    for( int j=0; j<4; j++ ) {
+                                        oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
+                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
+                                        LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
+                                    }
+                                    for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                          // reset NCDist[][]
+                                        if( j<ip+1 || j>=((ip/sp->N_AA)+1)*sp->N_AA ) {
+                                            NCDist[i][j] = NCDcpy[i][j];
+                                            NCDist[j][i] = NCDcpy[j][i];
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        case 2:     // translation
                             for( int i=0; i<sp->N_AA; i++ ) {
                                 for( int j=0; j<4; j++ ) {
                                     oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
@@ -729,7 +736,7 @@ int main(int argc, char *argv[])
                                 }
                             }
                             break;
-                        case 4:     // chain rotation
+                        case 3:     // chain rotation
                             for( int i=0; i<sp->N_AA; i++ ) {
                                 for( int j=0; j<4; j++ ) {
                                     oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
@@ -745,40 +752,8 @@ int main(int argc, char *argv[])
                                 }
                             }
                             break;
-                        default:    // pivot rotations
-                            switch( jp ) {
-                                case 0:
-                                    for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
-                                        for( int j=0; j<4; j++ ) {
-                                            oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
-                                            Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
-                                            Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
-                                            LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
-                                        }
-                                        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                          // reset NCDist[][]
-                                            if( j<(ip/sp->N_AA)*sp->N_AA || j>ip-1 ) {
-                                                NCDist[i][j] = NCDcpy[i][j];
-                                                NCDist[j][i] = NCDcpy[j][i];
-                                            }
-                                        }
-                                    }
-                                    break;
-                                case 1:
-                                    for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
-                                        for( int j=0; j<4; j++ ) {
-                                            oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();       // oldBox has to be transfered in order for LinListUpdate to update correctly
-                                            Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];          // reset to old coordinates
-                                            Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
-                                            LinkListUpdate(sp, Chn, i, j);                              // reset LinkedList
-                                        }
-                                        for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                          // reset NCDist[][]
-                                            if( j<ip+1 || j>=((ip/sp->N_AA)+1)*sp->N_AA ) {
-                                                NCDist[i][j] = NCDcpy[i][j];
-                                                NCDist[j][i] = NCDcpy[j][i];
-                                            }
-                                        }
-                                    }
-                            }
+                        default:
+                            std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
                     }
 
                     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
@@ -808,26 +783,25 @@ int main(int argc, char *argv[])
                 Eold = Enew;
                 eBin_o = eBin_n;
                 // sync HBDist[] and HBDcpy[]
-                switch( movetype ) {
-                    case 0:
-                        if( jp == 0 ) {
-                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                                NCDcpy[ip][m] = NCDist[ip][m];
-                            }
-                        }
-                        if( jp == 2 ) {
-                            for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                                NCDcpy[m][ip] = NCDist[m][ip];
-                            }
-                        }
-                        break;
-                    default:
+                if( movetype == 0 ) {
+                    if( jp == 0 ) {
                         for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                            for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
-                                NCDcpy[m][n] = NCDist[m][n];
-                                NCDcpy[n][m] = NCDist[n][m];
-                            }
+                            NCDcpy[ip][m] = NCDist[ip][m];
                         }
+                    }
+                    if( jp == 2 ) {
+                        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                            NCDcpy[m][ip] = NCDist[m][ip];
+                        }
+                    }
+                }
+                else {
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        for( int n=0; n<sp->N_CH*sp->N_AA; n++ ) {
+                            NCDcpy[m][n] = NCDist[m][n];
+                            NCDcpy[n][m] = NCDist[n][m];
+                        }
+                    }
                 }
                 // neighbour list is updated in move functions - only if it returns true
             }
@@ -852,57 +826,24 @@ int main(int argc, char *argv[])
                             }
                         }
                         break;
-                    case 3:     // translation
-                        for( int i=0; i<sp->N_AA; i++ ) {
-                            for( int j=0; j<4; j++ ) {
-                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
-                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
-                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
-                                LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
-                            }
-                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
-                                if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
-                                    NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
-                                    NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
+                    case 1:    // pivot rotation
+                        if( jp%2 == 0 ) {
+                            for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
+                                for( int j=0; j<4; j++ ) {
+                                    oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
+                                    Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
+                                    Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
+                                    LinkListUpdate(sp, Chn, i, j);                                  // reset LinkedList
+                                }
+                                for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                              // reset NCDist[][]
+                                    if( j<(ip/sp->N_AA)*sp->N_AA || j>ip-1 ) {
+                                        NCDist[i][j] = NCDcpy[i][j];
+                                        NCDist[j][i] = NCDcpy[j][i];
+                                    }
                                 }
                             }
                         }
-                        break;
-                    case 4:     // chain rotation
-                        for( int i=0; i<sp->N_AA; i++ ) {
-                            for( int j=0; j<4; j++ ) {
-                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
-                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
-                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
-                                LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
-                            }
-                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
-                                if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
-                                    NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
-                                    NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
-                                }
-                            }
-                        }
-                        break;
-                    default:    // pivot rotation
-                        switch( jp ) {
-                            case 0:
-                                for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
-                                    for( int j=0; j<4; j++ ) {
-                                        oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
-                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j] = BdCpy[4*i+j];              // reset old coordinates
-                                        Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox(oldBox);
-                                        LinkListUpdate(sp, Chn, i, j);                                  // reset LinkedList
-                                    }
-                                    for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {                              // reset NCDist[][]
-                                        if( j<(ip/sp->N_AA)*sp->N_AA || j>ip-1 ) {
-                                            NCDist[i][j] = NCDcpy[i][j];
-                                            NCDist[j][i] = NCDcpy[j][i];
-                                        }
-                                    }
-                                }
-                                break;
-                            case 1:
+                        else {
                                 for( int i=ip; i<((ip/sp->N_AA)+1)*sp->N_AA; i++ ) {
                                     for( int j=0; j<4; j++ ) {
                                         oldBox = Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBox();           // oldBox has to be transfered in order for LinListUpdate to update correctly
@@ -918,6 +859,41 @@ int main(int argc, char *argv[])
                                     }
                                 }
                         }
+                        break;
+                    case 2:     // translation
+                        for( int i=0; i<sp->N_AA; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
+                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
+                            }
+                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                                if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
+                                    NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
+                                    NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
+                                }
+                            }
+                        }
+                        break;
+                    case 3:     // chain rotation
+                        for( int i=0; i<sp->N_AA; i++ ) {
+                            for( int j=0; j<4; j++ ) {
+                                oldBox = Chn[ip].AmAc[i].Bd[j].getBox();
+                                Chn[ip].AmAc[i].Bd[j] = BdCpy[ip*4*sp->N_AA+4*i+j];
+                                Chn[ip].AmAc[i].Bd[j].setBox(oldBox);
+                                LinkListUpdate(sp, Chn, ip*sp->N_AA+i, j);
+                            }
+                            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                                if( j<ip*sp->N_AA || j>=(ip+1)*sp->N_AA ) {
+                                    NCDist[i+ip*sp->N_AA][j] = NCDcpy[i+ip*sp->N_AA][j];
+                                    NCDist[j][i+ip*sp->N_AA] = NCDcpy[j][i+ip*sp->N_AA];
+                                }
+                            }
+                        }
+                        break;
+                    default:
+                            std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
                 }
                 // reset HBList and HBDist
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -1386,13 +1362,11 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_NBox= 0;
     int read_LBox= 0;
     int read_WTWi= 0;
-    int read_WTPh= 0;
-    int read_WTPs= 0;
+    int read_WTPi= 0;
     int read_WTTr= 0;
     int read_WTRo= 0;
     int read_Disp= 0;
-    int read_DPhi= 0;
-    int read_DPsi= 0;
+    int read_DPiv= 0;
     int read_DTrn= 0;
     int read_DRot= 0;
     int read_ClOp= 0;
@@ -1454,20 +1428,16 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->LBOX = stod(value, nullptr);     read_LBox = 1; }
                 else if( option.compare("WT_WIGGLE")==0 ) {
                     sp->WT_WIGGLE = stoi(value, nullptr); read_WTWi = 1; }
-                else if( option.compare("WT_PHI")==0 ) {
-                    sp->WT_PHI = stoi(value, nullptr);   read_WTPh = 1; }
-                else if( option.compare("WT_PSI")==0 ) {
-                    sp->WT_PSI = stoi(value, nullptr);   read_WTPs = 1; }
+                else if( option.compare("WT_PIVOT")==0 ) {
+                    sp->WT_PIVOT = stoi(value, nullptr); read_WTPi = 1; }
                 else if( option.compare("WT_TRANS")==0 ) {
                     sp->WT_TRANS = stoi(value, nullptr); read_WTTr = 1; }
                 else if( option.compare("WT_ROT")==0 ) {
                     sp->WT_ROT = stoi(value, nullptr); read_WTRo = 1; }
                 else if( option.compare("DISP_MAX")==0 ) {
                     sp->DISP_MAX = stod(value, nullptr); read_Disp = 1; }
-                else if( option.compare("DPHI_MAX")==0 ) {
-                    sp->DPHI_MAX = stod(value, nullptr); read_DPhi = 1; }
-                else if( option.compare("DPSI_MAX")==0 ) {
-                    sp->DPSI_MAX = stod(value, nullptr); read_DPsi = 1; }
+                else if( option.compare("DPIV_MAX")==0 ) {
+                    sp->DPIV_MAX = stod(value, nullptr); read_DPiv = 1; }
                 else if( option.compare("DTRN_MAX")==0 ) {
                     sp->DTRN_MAX = stod(value, nullptr); read_DTrn = 1; }
                 else if( option.compare("DROT_MAX")==0 ) {
@@ -1579,12 +1549,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_WTWi == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- WT_wiggle not found. " << std::endl; 
             hd->os_log << "--- ERROR --- WT_wiggle not found. " << std::endl;}
-        if( read_WTPh == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- WT_phi not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- WT_phi not found. " << std::endl;}
-        if( read_WTPs == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- WT_psi not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- WT_psi not found. " << std::endl;}
+        if( read_WTPi == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- WT_pivot not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- WT_pivot not found. " << std::endl;}
         if( read_WTTr == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- WT_trans not found. " << std::endl; 
             hd->os_log << "--- ERROR --- WT_trans not found. " << std::endl;}
@@ -1594,12 +1561,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_Disp == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- DispMax not found. " << std::endl; 
             hd->os_log << "--- ERROR --- DispMax not found. " << std::endl;}
-        if( read_DPhi == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- dPhi_Max not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- dPhi_Max not found. " << std::endl;}
-        if( read_DPsi == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- dPsi_Max not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- dPsi_Max not found. " << std::endl;}
+        if( read_DPiv == 0 ){ read_essential = false;
+            std::cout  << "--- ERROR --- dPiv_Max not found. " << std::endl; 
+            hd->os_log << "--- ERROR --- dPiv_Max not found. " << std::endl;}
         if( read_DTrn == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- dTrn_Max not found. " << std::endl; 
             hd->os_log << "--- ERROR --- dTrn_Max not found. " << std::endl;}
@@ -2096,10 +2060,9 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# current runtime: " << Timer.curRunTime() << std::endl;
         backup << "# energy window: [" << sp->EMin << ";" << sp->EMax << "] in " << sp->NBin << " steps (bin width = " << sp->BinW << ")" << std::endl;
         backup << "# accepted " << ot->naccept[0] << " of " << ot->nattempt[0] << " (" << 100*(double)ot->naccept[0]/(double)ot->nattempt[0] << "%) of local moves" << std::endl;
-        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) of pivot (Phi) moves" << std::endl;
-        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) of pivot (Psi) moves" << std::endl;
-        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) of translation moves" << std::endl;
-        backup << "# accepted " << ot->naccept[4] << " of " << ot->nattempt[4] << " (" << 100*(double)ot->naccept[4]/(double)ot->nattempt[4] << "%) of chain rotation moves" << std::endl;
+        backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) of pivot moves" << std::endl;
+        backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) of translation moves" << std::endl;
+        backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) of chain rotation moves" << std::endl;
         backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
             backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << std::setprecision(15) << ot->lngE[i] << " " << ot->H[i] << std::endl;
@@ -2722,7 +2685,8 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
 
     return true;
 }
-bool Pivot(SysPara *sypa, Chain Chn[], int pivan, int res, int part, double &deltaE)
+// rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
+bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &deltaE)
 {
     Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
     double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
@@ -2902,7 +2866,7 @@ bool Pivot(SysPara *sypa, Chain Chn[], int pivan, int res, int part, double &del
     return true;
 }
 // rotation around N-Ca axis of i1-th amino acid. high=0 rotates lower part, high=1 rotates upper part
-bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
+/*bool rotPhi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
 {
     Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
     double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
@@ -3243,7 +3207,7 @@ bool rotPsi(SysPara *sypa, Chain Chn[], int i1, int high, double &deltaE)
     deltaE = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
 
     return true;
-}
+}*/
 // translation move of a whole chain
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
 {

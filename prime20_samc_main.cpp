@@ -342,6 +342,7 @@ int main(int argc, char *argv[])
 
     // geometry: read from input file or create new
     ini_overlap=false;
+    newchn=false;
     if( readCoord(sp, hd, Chn) ) {
         if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
             std::cout << "--- WARNING ---\toverlap in configuration from file '" << hd->confnm <<  "'" << std::endl;
@@ -1616,10 +1617,12 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
     string ID;
     int i = 0;
     int NaaFile;
+    stringstream inp_line_stream;
+    string inp_line_string;
 
     input.open(hd->confnm);
     if( input.is_open() ) {
-        std::cout << "reading coordiates from input file '" << hd->confnm << "'" << std::endl;
+        std::cout << "reading coordiates from input file '" << hd->confnm << "'" << std::endl;        
         for( int j=0; j<sp->N_CH; j++ ) {
             Chn[j].setChnNo(j);
             Chn[j].AmAc.clear();
@@ -1629,22 +1632,30 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
                 Chn[j].AmAc.push_back(AAinsert);
             }
         }
-        input >> NaaFile; input.ignore();
-        while( input.good() && !input.eof() ) {
-            input >> ID >> x >> y >> z;
+        
+        while( std::getline(input, inp_line_string) ) {
+            inp_line_stream.clear();
+            if( inp_line_string.at(0) == '#') {
+                continue;
+            }
+            if( inp_line_string.size() < 8 && inp_line_string.find_first_not_of("0123456789")==std::string::npos ) {
+                NaaFile = stoi(inp_line_string);
+                continue;
+            }
+            inp_line_stream.str(inp_line_string);
+            inp_line_stream >> ID >> x >> y >> z;
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
             Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].set_btype(i%4);
-
+            
             switch(i%4) {
                 case 0: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_N); break;
                 case 1: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_C); break;
                 case 2: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_O); break;
                 case 3: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM( MASS_R(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].get_AAalp()) ); break;
             }
-            input.ignore();
             i++;
-            if(i == NaaFile) { break; }
         }
+
         if(i != sp->N_CH*sp->N_AA*4) {
             hd->os_log<< "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
             std::cout << "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
@@ -1812,7 +1823,7 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
     if( Checkpos.is_open() ) {
         Checkpos << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with seq. " << sp->AA_seq << " at E=" << ener << std::endl;
         Checkpos << sp->N_CH*sp->N_AA*4 << std::endl;
-        Checkpos << setprecision(3) << std::fixed;
+        Checkpos << setprecision(15) << std::fixed;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             for( int j=0; j<4; j++ ) {
                 Checkpos << Chn[i/sp->N_AA].getChnNo() << "-" << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].get_AAalp() << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].get_btype() << std::setw(3) << std::setfill('0') << i*4+j << " "
@@ -2055,10 +2066,10 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# current configuration ( E=" << E << ")" << std::endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-            backup << std::setw(2) << std::setfill('0') << i << "N " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << std::endl;
-            backup << std::setw(2) << std::setfill('0') << i << "C " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2) << std::endl;
-            backup << std::setw(2) << std::setfill('0') << i << "O " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2) << std::endl;
-            backup << std::setw(2) << std::setfill('0') << i << "R " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "N " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "C " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[1].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "O " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2) << std::endl;
+            backup << std::setw(2) << std::setfill('0') << i << "R " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2) << std::endl;
         }
         backup.close();
         return true;

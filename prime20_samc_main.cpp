@@ -78,6 +78,7 @@
 #include "prime20_samc_chain.hpp"
 #include "prime20_samc_para.hpp"
 #include "timer.hpp"
+#include "random.hpp"
 
 using namespace std;
 
@@ -97,9 +98,6 @@ std::vector<std::vector<double>> NCDcpy;
 //double **NCDist;
 //double **NCDcpy;
 
-//mt19937 rng(time(NULL));                // constructor for random number generator
-mt19937 rng(44);                        // debug
-
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -115,7 +113,7 @@ int system_parameter_print(SysPara *sp, ostream &os);                           
 int sim_parameter_print(SysPara *sp, ostream &os);                                      // prints simulation parameters to os
 int cur_time_print(ostream &os);                                                        // prints current time
 
-int CommandInitialize(int argc, char *argv[], Header *hd);                              // identify file names from command input
+int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd);                              // identify file names from command input
 
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system parameters from file
@@ -190,7 +188,7 @@ int main(int argc, char *argv[])
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
     double m_total;                                         // total mass of the system
 
-    if(CommandInitialize(argc, argv, hd) == -1) {
+    if(CommandInitialize(argc, argv, sp, hd) == -1) {
         delete sp; delete hd; delete ot;
         return 0;
     }
@@ -204,11 +202,12 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    sp->Seed=Seed(sp->Seed-sp->add_Seed);
+
     system_parameter_print(sp, std::cout);
     system_parameter_print(sp, hd->os_log);
     sim_parameter_print(sp, std::cout);
     sim_parameter_print(sp, hd->os_log);
-
 
     for(int i=0; i<sp->NBOX*sp->NBOX*sp->NBOX; i++) {
         neighHead.push_back(-1);
@@ -434,7 +433,7 @@ int main(int argc, char *argv[])
             }
             deltaE = 0.0;
             // select move type
-            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
+            moveselec = trunc( ( (double)RND()/( (double)my_rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
             if( moveselec < sp->WT_WIGGLE )                                           { movetype = 0; }    // wiggle
             else if( moveselec < sp->WT_WIGGLE+sp->WT_PIVOT )                         { movetype = 1; }    // pivot
             else if( moveselec < sp->WT_WIGGLE+sp->WT_PIVOT+sp->WT_TRANS )            { movetype = 2; }    // translation
@@ -445,22 +444,22 @@ int main(int argc, char *argv[])
             }
             switch( movetype ) {
                 case 0:
-                    i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
+                    i_rand = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA*4));
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
                     accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                     break;
                 case 1:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)RND()/((double)my_rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
                     accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
                     accept = translation(sp, Chn, ip, deltaE);
                     break;
                 case 3:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
                     accept = rotation(sp, Chn, ip, deltaE);
                     break;
                 default:
@@ -585,7 +584,7 @@ int main(int argc, char *argv[])
                 CheckLinkListIntegrity(sp, Chn);
             }
             // select move type
-            moveselec = trunc( ( (double)rng()/( (double)rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
+            moveselec = trunc( ( (double)RND()/( (double)my_rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
             //moveselec = trunc(realdist01(rng)*(sp->WT_WIGGLE + sp->WT_PHI + sp->WT_PSI + sp->WT_TRANS));
             if( moveselec < sp->WT_WIGGLE )                                             { movetype = 0; }  // wiggle
             else if( moveselec < (sp->WT_WIGGLE+sp->WT_PIVOT) )                         { movetype = 1; }  // pivot
@@ -604,15 +603,15 @@ int main(int argc, char *argv[])
             ot->nattempt[movetype]++;
             switch( movetype ) {
                 case 0:
-                    i_rand = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA*4));
+                    i_rand = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA*4));
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
                     BdCpy[ip*4+jp] = Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp];
                     accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                     break;
                 case 1:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
-                    jp = trunc(((double)rng()/((double)rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
+                    jp = trunc(((double)RND()/((double)my_rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
                     if( jp%2 == 0) {
                         for( int i=(ip/sp->N_AA)*sp->N_AA; i<ip+1; i++ ) {
                             for( int j=0; j<4; j++ ) {
@@ -630,7 +629,7 @@ int main(int argc, char *argv[])
                     accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
                     for( int i=0; i<sp->N_AA; i++ ) {
                         for( int j=0; j<4; j++ ) {
                             BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
@@ -639,7 +638,7 @@ int main(int argc, char *argv[])
                     accept = translation(sp, Chn, ip, deltaE);
                     break;
                 case 3:
-                    ip = trunc(((double)rng()/((double)rng.max()+1))*sp->N_CH);
+                    ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
                     for( int i=0; i<sp->N_AA; i++ ) {
                         for( int j=0; j<4; j++ ) {
                             BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
@@ -1088,6 +1087,8 @@ int command_print(Header *hd, ostream &os)
 int system_parameter_print(SysPara *sp, ostream &os)
 {
     os << "------------------------" << std::endl
+       << "RNG Seed:                 " << sp->Seed << std::endl
+       << "------------------------" << std::endl
        << ">> system information <<" << std::endl
        << "No. of chains:            " << sp->N_CH << std::endl
        << "Degree of polymerization: " << sp->N_AA << std::endl
@@ -1137,7 +1138,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
 //          XXXXXXXXXX  INPUT OUTPUT FUNCTIONS  XXXXXXXXXX
 
 // identify file names from command input
-int CommandInitialize(int argc, char *argv[], Header *hd)
+int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
 {
     bool display_help = false;
     std::string opt1, opt2;
@@ -1157,6 +1158,7 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
     hd->dihedPhinm = "Phi.dat";
     hd->dihedPsinm = "Psi.dat";
     hd->lognm  = "out.log";
+    sp->add_Seed = 0;
 
     //reading arguments
     if((argc+1)%2 == 0) {
@@ -1173,6 +1175,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
                 hd->rrunnm = opt2; }
             else if( opt1.compare("-d") == 0 ) {
                 hd->dbposi = opt2; }
+            else if( opt1.compare("-rng") == 0 ) {
+                sp->add_Seed = stoi(opt2); }
             else {
                 display_help = true;
             }
@@ -1190,7 +1194,8 @@ int CommandInitialize(int argc, char *argv[], Header *hd)
                   << "  -d, output positions for debugging" << std::endl
                   << "  -h, output hydrogen bond matrices" << std::endl
                   << "  -g, output tensor of gyration" << std::endl
-                  << "If not specified default file names will be used" << std::endl;
+                  << "If not specified default file names will be used" << std::endl
+                  << "  -rng [int], integer value to be substracted from seed in parameter file" << std::endl;
         return -1;
     }
 
@@ -1367,6 +1372,15 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_WCon= 0;
     int read_ConE= 0;
     int read_ConV= 0;
+    int read_seed= 0;
+
+    //default values
+    sp->HB_ContMat = false;
+    sp->vdWener = false;
+    sp->Et = false;
+    sp->dihedral = false;
+    sp->wConfig = false;
+    sp->Seed = -1;
 
     ifstr.open(hd->paranm);
     if( ifstr.is_open() ) {
@@ -1481,6 +1495,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                     else if( value.compare("false")==0 ) { 
                         sp->wConfig = false; 
                         read_WCon = 1; read_ConE = 1; read_ConV = 1; } }
+                
+                else if( option.compare("rng_seed")==0 ) {
+                    sp->Seed = stod(value, nullptr);  read_seed = 1; }
             }
         }
 
@@ -1587,11 +1604,14 @@ bool readParaInput(SysPara *sp, Header *hd)
             std::cout  << "Warning! wConfig not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! wConfig not found. Set to FALSE by default" << std::endl;}
         if( read_ConE == 0 ){ read_observ = false;
-            std::cout  << "Warning! ConfigE not found. Set to FALSE by default" << std::endl; 
-            hd->os_log << "Warning! ConfigE not found. Set to FALSE by default" << std::endl;}
+            std::cout  << "Warning! ConfigE not found. no default" << std::endl; 
+            hd->os_log << "Warning! ConfigE not found. no default" << std::endl;}
         if( read_ConV == 0 ){ read_observ = false;
-            std::cout  << "Warning! ConfigV not found. Set to FALSE by default" << std::endl; 
-            hd->os_log << "Warning! ConfigV not found. Set to FALSE by default" << std::endl;}
+            std::cout  << "Warning! ConfigV not found. no default" << std::endl; 
+            hd->os_log << "Warning! ConfigV not found. no default" << std::endl;}
+        if( read_seed == 0 ){
+            std::cout  << "Warning! rnd_seed not found. Set to default: TIME(NULL)" << std::endl; 
+            hd->os_log << "Warning! rnd_seed not found. Set to default: TIME(NULL)" << std::endl;}
 
         ifstr.close();
         if(read_essential) {
@@ -2418,7 +2438,7 @@ bool acceptance(double lngEold, double lngEnew)
     //uniform_real_distribution<double> distribution(0,1);
     //double MCrand = distribution(rng);
     if( lngEnew <= lngEold ) return true;
-    double MCrand = (double)rng()/(double)rng.max();
+    double MCrand = (double)RND()/(double)my_rng.max();
     if( exp(lngEold-lngEnew) > MCrand ) return true;
     return false;
 }
@@ -2442,7 +2462,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
     // calculate displacement vector (disp[]) and move bead
     cpy = Chn[h].AmAc[i].Bd[j];
     for(int k = 0; k < 3; k++) {
-        disp[k] = ( ((double)rng()/(double)rng.max())*2 - 1. ) * sp->DISP_MAX;
+        disp[k] = ( ((double)RND()/(double)my_rng.max())*2 - 1. ) * sp->DISP_MAX;
     }
     newx = Chn[h].AmAc[i].Bd[j].getR(0) + disp[0];  Chn[h].AmAc[i].Bd[j].addBC(0, floor(newx/sp->L));   newx = newx - sp->L*floor(newx/sp->L);
     newy = Chn[h].AmAc[i].Bd[j].getR(1) + disp[1];  Chn[h].AmAc[i].Bd[j].addBC(1, floor(newy/sp->L));   newy = newy - sp->L*floor(newy/sp->L);
@@ -2703,7 +2723,7 @@ bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &del
         }
     }
 
-    angle = sypa->DPIV_MAX*(1.0 - 2.0*((double)rng()/(double)rng.max()));
+    angle = sypa->DPIV_MAX*(1.0 - 2.0*((double)RND()/(double)my_rng.max()));
     cos_a = cos(angle); sin_a = sin(angle);
     if(pivan == 0) {
         std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[0], Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1]);  nsqrt = absVec(n);
@@ -2870,7 +2890,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
     }
     Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
     for( int i=0; i<3; i++ ) {
-        dVec[i] = ( ((double)rng()/(double)rng.max())*2 - 1. )*sp->DTRN_MAX;
+        dVec[i] = ( ((double)RND()/(double)my_rng.max())*2 - 1. )*sp->DTRN_MAX;
     }
 
     for( int i=0; i<sp->N_AA; i++ ) {
@@ -2964,10 +2984,10 @@ bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
     }
     Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
 
-    angle = ((double)rng()/(double)rng.max()) * sp->DROT_MAX;       // angle of rotation
+    angle = ((double)RND()/(double)my_rng.max()) * sp->DROT_MAX;       // angle of rotation
     cos_a = cos(angle); sin_a = sin(angle);
-    axisPolar = ((double)rng()/(double)rng.max()) * M_PI;           // polar angle of rotation axis
-    axisAzim = ((double)rng()/(double)rng.max()) * M_PI*2.0;        // azimuthal angle of rotation axis
+    axisPolar = ((double)RND()/(double)my_rng.max()) * M_PI;           // polar angle of rotation axis
+    axisAzim = ((double)RND()/(double)my_rng.max()) * M_PI*2.0;        // azimuthal angle of rotation axis
     rotAxis[0] = cos(axisAzim)*sin(axisPolar);  rotAxis[1] = sin(axisAzim)*sin(axisPolar);  rotAxis[2] = cos(axisPolar);
     // rotation matrix
     rotMtrx[0][0] = cos_a + rotAxis[0]*rotAxis[0]*(1-cos_a);

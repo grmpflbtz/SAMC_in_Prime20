@@ -58,6 +58,9 @@ struct SysPara {
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         std::vector<double> ConfigE;
         double ConfigV;
+
+    long unsigned int Seed; // seed for random number generator
+    int add_Seed;           // integer added to Seed (manipulate seed with program arguments)
 };
 
 struct Header {

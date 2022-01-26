@@ -51,10 +51,10 @@ void AmiAc::Setup(string chain, int i)
 			PBND_CR = BND_CaC;
 			ANGL_RCaN = 0.0;
 			ANGL_RCaC = 0.0;
-			SQZ6 = 4.064;
-			SQZ7 = 2.600;
-			SQZ8 = 2.610;
-			SQZ9 = 4.013;
+			SQZ6 = 2.600;
+			SQZ7 = 2.610;
+			SQZ8 = 4.013;
+			SQZ9 = 4.064;
 			SQZ10= 4.904;
 			break;
 		case 1: 

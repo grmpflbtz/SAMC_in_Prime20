@@ -424,7 +424,7 @@ int main(int argc, char *argv[])
             }
 
             if( (sp->cluster_opt==0) && (step%1000 == 0) ) {
-                std::cout << "pre-SAMC move " << step << "\r" << std::flush;
+                std::cout << "\r" << "pre-SAMC move " << step << std::flush;
             }
             // HBList copy
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -442,6 +442,7 @@ int main(int argc, char *argv[])
                 hd->os_log<< "--- ERROR ---\tno movetype was selected" << endl; hd->os_log.close();
                 std::cout << "--- ERROR ---\tno movetype was selected" << endl; return 0; 
             }
+            ot->nattempt[movetype]++;
             switch( movetype ) {
                 case 0:
                     i_rand = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA*4));
@@ -468,6 +469,7 @@ int main(int argc, char *argv[])
 
             if(accept) {        // legal move
                 Eold += deltaE;
+                ot->naccept[movetype]++;
                 // sync HBDist[] and HBDcpy[]
                 if( movetype == 0 ) {
                     if( jp == 0 ) {
@@ -517,26 +519,35 @@ int main(int argc, char *argv[])
             }
 
             // check bond length after every move - if this failes: abort run
+            /*
             if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
                 hd->os_log<< std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
                 std::cerr << std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
                 outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
                 this_thread::sleep_for(chrono::milliseconds(200));
                 return 0;
-            }
+            }*/            
             if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
+                double Ecur = E_check(sp, Chn);
                 hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl; hd->os_log.close();
                 std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl;
                 std::cerr.precision(3); std::cerr << std::fixed;
+                std::cerr << "NCDist:" << std::endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     std::cerr << "k" << k << "\t";
                     for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
                         std::cerr << NCDist[k][m] << "\t";
                     } std::cerr << std::endl;
-                } std::cerr << std::endl;
+                } std::cerr << std::endl << "HBList:";
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
                 }
+                std::cerr << std::endl << "aditional info:" << std::endl;
+                std::cerr << "step: " << step << std::endl;
+                std::cerr << "movetype: " << movetype << std::endl;
+                std::cerr << "ip=" << ip << ",  jp=" << jp << std::endl;
+                
+                BackupSAMCrun(sp, hd, ot, Chn, Timer, 0, step, 0,0, Ecur);
                 outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
                 this_thread::sleep_for(chrono::milliseconds(200));
 
@@ -564,6 +575,10 @@ int main(int argc, char *argv[])
                 ot->dihePsi[eBin_o][i][angl] += 1;
             }
         }
+    }
+    for( int i=0; i<4; i++ ) {
+        ot->nattempt[i] = 0;
+        ot->naccept[i] = 0;
     }
 
     /*              XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

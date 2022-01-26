@@ -1655,7 +1655,7 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
         
         while( std::getline(input, inp_line_string) ) {
             inp_line_stream.clear();
-            if( inp_line_string.at(0) == '#') {
+            if( (inp_line_string.length() == 0) || (inp_line_string.at(0) == '#')) {
                 continue;
             }
             if( inp_line_string.size() < 8 && inp_line_string.find_first_not_of("0123456789")==std::string::npos ) {
@@ -2081,9 +2081,9 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) of chain rotation moves" << std::endl;
         backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            backup << i << " " << sp->EMin+i*sp->BinW << " " << sp->EMin+(i+1)*sp->BinW << " " << std::setprecision(15) << ot->lngE[i] << " " << ot->H[i] << std::endl;
+            backup << i << " " << std::setprecision(8) << sp->EMin+i*sp->BinW << " " << std::setprecision(8) << sp->EMin+(i+1)*sp->BinW << " " << std::setprecision(15) << ot->lngE[i] << " " << ot->H[i] << std::endl;
         }
-        backup << "# current configuration ( E=" << E << ")" << std::endl;
+        backup << "# current configuration ( E=" << std::setprecision(8) << E << ")" << std::endl;
         backup << "beadID  x  y  z  BCx  BCy  BCz" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             backup << std::setw(2) << std::setfill('0') << i << "N " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1) << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2) << std::endl;
@@ -2120,7 +2120,7 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned l
         if(sp->wConfig) { results << "#\tconfiguration snapshots (file .xyz)" << std::endl; }
         results << "Bin from to H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
-            results << i << " " << sp->EMin+i*sp->BinW << " " <<sp->EMin+(i+1)*sp->BinW << " " << ot->H[i] << std::endl;
+            results << i << " " << std::setprecision(8) << sp->EMin+i*sp->BinW << " " << std::setprecision(8) << sp->EMin+(i+1)*sp->BinW << " " << ot->H[i] << std::endl;
         }
         results.close();
         return true;

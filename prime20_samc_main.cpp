@@ -2063,10 +2063,11 @@ bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double e
     }
     else if( init == 1 ) {
         if( ot->conf_Ntot < sp->conf_Nmax ) {
-            if( (ener >= sp->conf_EMin) && (ener <= sp->conf_EMax)) {
-                if( abs(ot->conf_Eprev - ener) >= sp->conf_dE ) {
+            if( abs(ot->conf_Eprev - ener) >= sp->conf_dE ) {
+                ot->conf_Eprev = ener;
+                if( (ener >= sp->conf_EMin) && (ener <= sp->conf_EMax)) {
                     outputPositions(sp, hd, hd->snapshots, Chn, 1, ener);
-                    ot->conf_Eprev = ener;
+                    ot->conf_Ntot++;
                 }
             }
         }

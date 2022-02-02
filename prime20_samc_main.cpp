@@ -128,6 +128,7 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                
 bool output_vdW(SysPara *sp, Header *hd, Output *ot, int step);                         // write van-der-Waals energy
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
 bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);                    // write dihedral angles
+bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, int init);                   // write snapshots
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, unsigned long int t);         // backup of observables for production run
 
@@ -261,8 +262,8 @@ int main(int argc, char *argv[])
                 ot->dihePsi[i][j] = new long unsigned int[360];
             }
         }
-    ot->conf_n = new int[sp->ConfigE.size()];
-    ot->conf_wt = new int[sp->ConfigE.size()];
+    ot->conf_Eprev = 100;
+    ot->conf_Ntot = 0;
 
     cur_time_print(std::cout);
     cur_time_print(hd->os_log);
@@ -321,6 +322,9 @@ int main(int argc, char *argv[])
     if(sp->Et) {
         output_Et(sp, hd, ot, 0, 0);
     }
+    if(sp->wConfig) {
+        output_snapshots(sp, hd, ot, Chn, 0.0, 0);
+    }
     if(sp->dihedral) {
         for( int i=0; i<sp->NBin; i++ ) {
             for( int j=0; j<(sp->N_CH*sp->N_AA - sp->N_CH); j++ ) {     // in every chain the dihedral angle on one end can't be calculated, hence the " - sp->N_CH "
@@ -329,12 +333,6 @@ int main(int argc, char *argv[])
                     ot->dihePsi[i][j][k] = 0;
                 }
             }
-        }
-    }
-    if(sp->wConfig) {
-        for( int i=0; i<sp->ConfigE.size(); i++ ) {
-            ot->conf_n[i] = 0;
-            ot->conf_wt[i] = 0;
         }
     }
 
@@ -926,18 +924,7 @@ int main(int argc, char *argv[])
                 }
             }
             if(sp->wConfig) {
-                for( int i=0; i<sp->ConfigE.size(); i++ ) {
-                    if( abs(Eold - sp->ConfigE.at(i)) <= sp->ConfigV && ot->conf_n[i]<10 ) {
-                        if( ot->conf_wt[i] + 10000 < step ) {
-                            oss.str("");
-                            oss << "coordinates_E" << i << "_" << ot->conf_n[i] << ".xyz";
-                            filename = oss.str();
-                            outputPositions(sp,hd, filename, Chn, 1, Eold);
-                            ot->conf_n[i]++;
-                            ot->conf_wt[i]=step;
-                        }
-                    }
-                }
+                output_snapshots(sp, hd, ot, Chn, Eold, 1);
             }
             if(sp->tGyr) {
                 calc_gyration_tensor(sp, ot, Chn, eBin_o);
@@ -1133,9 +1120,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
         if( sp->tGyr == true ) { obs = 1;
             os << "- Tensor of gyration" << std::endl; }
         if( sp->wConfig == true ) { obs = 1;
-            os << "- Configurations at energies:";
-            for( int i=0; i<sp->ConfigE.size(); i++ ) { os << " " << sp->ConfigE.at(i); }
-            os << std::endl << "  → with deviation tolerance dE = " << sp->ConfigV << std::endl; }
+            os << "- Configuration snapshots in E(" << std::setprecision(4) << sp->conf_EMin << ";" << std::setprecision(4) << sp->conf_EMax << "); Nmax = " << sp->conf_Nmax << std::endl; }
         if( sp->Et == true ) { obs = 1;
             os << "- E(t) energy time development" << std::endl; }
         if( sp->dihedral == true ) { obs = 1;
@@ -1170,6 +1155,7 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
     hd->vdWnm  = "vdWE.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->enertm = "Et.dat";
+    hd->snapshots = "snapshots.dat";
     hd->dihedPhinm = "Phi.dat";
     hd->dihedPsinm = "Psi.dat";
     hd->lognm  = "out.log";
@@ -1385,17 +1371,11 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_Et  = 0;
     int read_angl= 0;
     int read_WCon= 0;
-    int read_ConE= 0;
-    int read_ConV= 0;
+    int read_CEMa= 0;
+    int read_CEMi= 0;
+    int read_CdE = 0;
+    int read_CNM = 0;
     int read_seed= 0;
-
-    //default values
-    sp->HB_ContMat = false;
-    sp->vdWener = false;
-    sp->Et = false;
-    sp->dihedral = false;
-    sp->wConfig = false;
-    sp->Seed = -1;
 
     ifstr.open(hd->paranm);
     if( ifstr.is_open() ) {
@@ -1486,36 +1466,22 @@ bool readParaInput(SysPara *sp, Header *hd)
                     if( value.compare("true")==0 ) {sp->dihedral = true; read_angl = 1; }
                     else if( value.compare("false")==0 ) { sp->dihedral = false; read_angl = 1; } }
                 else if( option.compare("wConfig")==0 ) {
-                    if( value.compare("true")==0 ) { 
-                        sp->wConfig = true;    read_WCon = 1;
-                        for( int i=0; i<2; i++ ) {
-                            std::getline(ifstr, s_line);
-                            ss_line.clear();    ss_line.str(s_line);
-                            std::getline(ss_line, option, '=');
-                            std::getline(ss_line, value, ';');
-                            if( option.compare("ConfigE")==0 ) {
-                                ss_line.clear(); ss_line.str(value);
-                                std::istream_iterator<std::string> begin(ss_line);
-                                std::istream_iterator<std::string> end;
-                                std::vector<std::string> v_ener(begin, end);
-                                for( int j=0; j<v_ener.size(); j++ ) { sp->ConfigE.push_back(stod(v_ener.at(j))); }
-                                read_ConE = 1;
-                            }
-                            else if( option.compare("ConfigV")==0 ) {
-                                sp->ConfigV = stod(value, nullptr);
-                                read_ConV = 1;
-                            }
-                        }
-                    }
-                    else if( value.compare("false")==0 ) { 
-                        sp->wConfig = false; 
-                        read_WCon = 1; read_ConE = 1; read_ConV = 1; } }
-                
+                    if( value.compare("true")==0 ) { sp->wConfig = true; read_WCon = 1; }
+                    else if( value.compare("false")==0 ) { sp->wConfig = false; read_WCon = 1; } }
+                else if( option.compare("conf_EMax")==0 ) {
+                    sp->conf_EMax = stod(value, nullptr); read_CEMa = 1; }
+                else if( option.compare("conf_EMin")==0 ) {
+                    sp->conf_EMin = stod(value, nullptr); read_CEMi = 1; }
+                else if( option.compare("conf_dE")==0 ) {
+                    sp->conf_dE = stod(value, nullptr); read_CdE = 1; }
+                else if( option.compare("conf_NMax")==0 ) {
+                    sp->conf_Nmax = stoi(value, nullptr); read_CNM = 1; }                
                 else if( option.compare("rng_seed")==0 ) {
                     sp->Seed = stod(value, nullptr);  read_seed = 1; }
             }
         }
 
+        // error messages and default values
         if( read_NCH  == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- N_CH not found. " << std::endl; 
             hd->os_log << "--- ERROR --- N_CH not found. " << std::endl;}
@@ -1598,33 +1564,43 @@ bool readParaInput(SysPara *sp, Header *hd)
             std::cout  << "--- ERROR --- Fix_lngU not found. " << std::endl; 
             hd->os_log << "--- ERROR --- Fix_lngU not found. " << std::endl;}
         if( read_HBCM == 0 ){ read_observ = false;
+            sp->HB_ContMat = false;
             std::cout  << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl;}
         if( read_Ree  == 0 ){ read_observ = false;
+            sp->Ree = false;
             std::cout  << "Warning! Ree not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! Ree not found. Set to FALSE by default" << std::endl;}
         if( read_tGyr == 0 ){ read_observ = false;
+            sp->tGyr = false;
             std::cout  << "Warning! tGyr not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! tGyr not found. Set to FALSE by default" << std::endl;}
         if( read_vdWe == 0 ){ read_observ = false;
+            sp->vdWener = false;
             std::cout  << "Warning! vdWener not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! vdWener not found. Set to FALSE by default" << std::endl;}
         if( read_Et == 0 ){ read_observ = false;
+            sp->Et = false;
             std::cout  << "Warning! Et not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! Et not found. Set to FALSE by default" << std::endl;}
         if( read_angl == 0 ){ read_observ = false;
+            sp->dihedral = false;
             std::cout  << "Warning! dihedral not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! dihedral not found. Set to FALSE by default" << std::endl;}
         if( read_WCon == 0 ){ read_observ = false;
+            sp->wConfig = false;
             std::cout  << "Warning! wConfig not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! wConfig not found. Set to FALSE by default" << std::endl;}
-        if( read_ConE == 0 ){ read_observ = false;
-            std::cout  << "Warning! ConfigE not found. no default" << std::endl; 
-            hd->os_log << "Warning! ConfigE not found. no default" << std::endl;}
-        if( read_ConV == 0 ){ read_observ = false;
-            std::cout  << "Warning! ConfigV not found. no default" << std::endl; 
-            hd->os_log << "Warning! ConfigV not found. no default" << std::endl;}
+        if( read_CEMa == 0 ){ read_observ = false;
+            sp->conf_EMax = sp->EMax;}
+        if( read_CEMi == 0 ){ read_observ = false;
+            sp->conf_EMin = sp->EMin;}
+        if( read_CdE == 0 ){ read_observ = false;
+            sp->conf_dE = 2.0;}
+        if( read_CNM == 0 ){ read_observ = false;
+            sp->conf_Nmax = 50;}
         if( read_seed == 0 ){
+            sp->Seed = -1;
             std::cout  << "Warning! rnd_seed not found. Set to default: TIME(NULL)" << std::endl; 
             hd->os_log << "Warning! rnd_seed not found. Set to default: TIME(NULL)" << std::endl;}
 
@@ -2001,7 +1977,7 @@ bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
             for( int i=0; i<sp->T_WRITE; i++ ) {
                 Enew = ot->Et[i];
                 if( abs(Enew-Eold) >= 1.0 ) {
-                    ostr << ((step-1)/sp->T_WRITE)*sp->T_WRITE + i << " " << Enew << std::endl;
+                    ostr << ((step-1)/sp->T_WRITE)*sp->T_WRITE + i << " " << std::setprecision(4) << Enew << std::endl;
                     Eold = Enew;
                 }
             }
@@ -2066,6 +2042,44 @@ bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step)
 
     return true;
 }
+// write snapshots
+bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, int init)
+{
+    ofstream ostr;
+
+    if( init == 0 ) {
+        ostr.open(hd->snapshots, ios::out);
+        if( ostr.is_open() ) {
+            ostr << "# configuration snaphots in E(" << sp->conf_EMin << ";" << sp->conf_EMax << ")" << std::endl
+                 << "# System: " << sp->N_CH << " chains; length " << sp->N_AA << "; seq (" << sp->AA_seq << ")" << std::endl << std::endl;
+            ostr.close();
+            return true;
+        }
+        else {
+            hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->snapshots << std::endl;
+            std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->snapshots << std::endl;
+            return false;
+        }
+    }
+    else if( init == 1 ) {
+        if( ot->conf_Ntot < sp->conf_Nmax ) {
+            if( (ener >= sp->conf_EMin) && (ener <= sp->conf_EMax)) {
+                if( abs(ot->conf_Eprev - ener) >= sp->conf_dE ) {
+                    outputPositions(sp, hd, hd->snapshots, Chn, 1, ener);
+                    ot->conf_Eprev = ener;
+                }
+            }
+        }
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not write to file " << hd->snapshots << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not write to file " << hd->snapshots << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 // writes backup file in SAMC run
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E)
 {
@@ -3620,8 +3634,6 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
             delete[] ot->dihePsi[i]; }
             delete[] ot->dihePhi;
             delete[] ot->dihePsi;
-    delete[] ot->conf_n;
-    delete[] ot->conf_wt;
 
     return 0;
 }

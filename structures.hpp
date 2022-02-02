@@ -56,8 +56,10 @@ struct SysPara {
     bool Et;                // energy time development
     bool dihedral;          // dihedral angles
     bool wConfig;           // write configurations for energies specified by vector ConfigE
-        std::vector<double> ConfigE;
-        double ConfigV;
+        double conf_EMax;
+        double conf_EMin;
+        double conf_dE;
+        int conf_Nmax;
 
     long unsigned int Seed; // seed for random number generator
     int add_Seed;           // integer added to Seed (manipulate seed with program arguments)
@@ -76,6 +78,7 @@ struct Header {
     std::string vdWnm;      // output file name van-der-Waals energy
     std::string grdcnm;     // output file name ground state configuration
     std::string enertm;     // output file name energy time development
+    std::string snapshots;  // output file name snapshots
     std::string dihedPhinm; // output file name dihedral angle Phi
     std::string dihedPsinm; // output file name dihedral angle Psi
     std::string lognm;      // output file system log
@@ -96,8 +99,8 @@ struct Output {
     double *Et;                     // energy time development
     long unsigned int ***dihePhi;
     long unsigned int ***dihePsi;
-    int *conf_n;                    // # of configs written
-    int *conf_wt;                   // last time writing config for this energy
+    int conf_Ntot;                  // # of total configs recorded
+    double conf_Eprev;              // previously recorded energy
     long unsigned int nattempt[5];  // # of attempted moves
     long unsigned int naccept[5];   // # of accepted moves
 };

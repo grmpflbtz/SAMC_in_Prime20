@@ -205,6 +205,8 @@ int main(int argc, char *argv[])
 
     sp->Seed=Seed(sp->Seed-sp->add_Seed);
 
+    sp->NBin = (sp->EMax - sp->EMin) / sp->BinW;
+
     system_parameter_print(sp, std::cout);
     system_parameter_print(sp, hd->os_log);
     sim_parameter_print(sp, std::cout);
@@ -1119,6 +1121,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
        << ">> SAMC parameters <<" << std::endl
        << "Allowed energy range:     [" << sp->EMin << ";" << sp->EMax << "]" << std::endl
        << "N of energy bins:         " << sp ->NBin << std::endl
+       << "energy bin width:         " << sp ->BinW << std::endl
        << "N of SAMC steps:          " << sp->T_MAX << std::endl;
         if(sp->FIX_lngE == true ) {
             os << "Using fixed lng(E)" << std::endl; }
@@ -1354,7 +1357,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_NAA = 0;
     int read_AAS = 0;
     int read_L   = 0;
-    int read_NBin= 0;
+    int read_BinW= 0;
     int read_EMin= 0;
     int read_EMax= 0;
     int read_ESt = 0;
@@ -1406,8 +1409,8 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->AA_seq = value;                  read_AAS = 1; }
                 else if( option.compare("L")==0 ) {
                     sp->L = stod(value, nullptr);        read_L = 1; }
-                else if( option.compare("NBin")==0 ) {
-                    sp->NBin = stoi(value, nullptr);     read_NBin = 1; }
+                else if( option.compare("BinW")==0 ) {
+                    sp->BinW = stod(value, nullptr);     read_BinW = 1; }
                 else if( option.compare("EMin")==0 ) {
                     sp->EMin = stod(value, nullptr);     read_EMin = 1; }
                 else if( option.compare("EMax")==0 ) {
@@ -1507,9 +1510,10 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_L    == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- L not found. " << std::endl; 
             hd->os_log << "--- ERROR --- L not found. " << std::endl;}
-        if( read_NBin == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- NBin not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- NBin not found. " << std::endl;}
+        if( read_BinW == 0 ){ read_essential = false;
+            sp->BinW = 0.1;
+            std::cout  << "--- ERROR --- BinW not found. Set to default = 0.1 " << std::endl; 
+            hd->os_log << "--- ERROR --- BinW not found. Set to default = 0.1 " << std::endl;}
         if( read_EMin == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- EMin not found. " << std::endl; 
             hd->os_log << "--- ERROR --- EMin not found. " << std::endl;}
@@ -1517,8 +1521,9 @@ bool readParaInput(SysPara *sp, Header *hd)
             std::cout  << "--- ERROR --- EMax not found. " << std::endl; 
             hd->os_log << "--- ERROR --- EMax not found. " << std::endl;}
         if( read_ESt  == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- EStart not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- EStart not found. " << std::endl;}
+            sp->EStart = sp->EMax;
+            std::cout  << "--- ERROR --- Estart not found. Set to default = EMax. " << std::endl; 
+            hd->os_log << "--- ERROR --- Estart not found. Set to default = EMax. " << std::endl;}
         if( read_tSt  == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- tStart not found. " << std::endl; 
             hd->os_log << "--- ERROR --- tStart not found. " << std::endl;}
@@ -1604,6 +1609,13 @@ bool readParaInput(SysPara *sp, Header *hd)
             sp->wConfig = false;
             std::cout  << "Warning! wConfig not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! wConfig not found. Set to FALSE by default" << std::endl;}
+        if( read_ESt  == 0 ){ 
+            sp->EStart = sp->EMax;
+        }
+        if( (sp->EStart > sp->EMax) || (sp->EStart < sp->EMin) ) {
+            sp->EStart = sp->EMax;
+        }
+
         if( read_CEMa == 0 ){ read_observ = false;
             sp->conf_EMax = sp->EMax;}
         if( read_CEMi == 0 ){ read_observ = false;

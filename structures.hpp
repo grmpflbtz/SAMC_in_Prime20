@@ -52,7 +52,7 @@ struct SysPara {
     bool HB_ContMat;        // Hydrogen bond contact matrices
     bool Ree;               // end-to-end distance distribution
     bool tGyr;              // tensor of gyration
-    bool vdWener;           // van-der-Waals energy
+    bool intrainterMol;     // intra- vs inter-molecular energies
     bool Et;                // energy time development
     bool dihedral;          // dihedral angles
     bool wConfig;           // write configurations for energies specified by vector ConfigE
@@ -66,22 +66,22 @@ struct SysPara {
 };
 
 struct Header {
-    std::string confnm;     // input file name initial configuration
-    std::string paranm;     // input file name system parameters
-    std::string lngEnm;     // input file name ln g(E)
-    std::string rrunnm;     // input file name rerun file input
-    std::string dbposi;     // output file name debug position
-    std::string iniconf;    // output file name config created by newChain()
-    std::string hbmatr;     // output file name HB matrices
-    std::string reenm;      // output file name end-to-end distance distribution
-    std::string tGyrnm;     // output file name tensor of gyration
-    std::string vdWnm;      // output file name van-der-Waals energy
-    std::string grdcnm;     // output file name ground state configuration
-    std::string enertm;     // output file name energy time development
-    std::string snapshots;  // output file name snapshots
-    std::string dihedPhinm; // output file name dihedral angle Phi
-    std::string dihedPsinm; // output file name dihedral angle Psi
-    std::string lognm;      // output file system log
+    std::string confnm;         // input file name initial configuration
+    std::string paranm;         // input file name system parameters
+    std::string lngEnm;         // input file name ln g(E)
+    std::string rrunnm;         // input file name rerun file input
+    std::string dbposi;         // output file name debug position
+    std::string iniconf;        // output file name config created by newChain()
+    std::string hbmatr;         // output file name HB matrices
+    std::string reenm;          // output file name end-to-end distance distribution
+    std::string tGyrnm;         // output file name tensor of gyration
+    std::string interintraMol;  // output file name inter-vs-intra-molecular energies
+    std::string grdcnm;         // output file name ground state configuration
+    std::string enertm;         // output file name energy time development
+    std::string snapshots;      // output file name snapshots
+    std::string dihedPhinm;     // output file name dihedral angle Phi
+    std::string dihedPsinm;     // output file name dihedral angle Psi
+    std::string lognm;          // output file system log
 
     std::ofstream os_log;   // ofstream of log file
 };
@@ -95,7 +95,10 @@ struct Output {
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
-    double *vdWener;                // intra- and inter-chain van-der-Waals energy
+    double vdWener[2];              // intra- and inter-molecular van-der-Waals energy
+    double HBener[2];               // intra- and inter-molecular HB energy
+    double *intrainterE;            // inter- and intra-molecular energies
+        int intrainterE_freq;       // frequency of interintraE calculations
     double *Et;                     // energy time development
     long unsigned int ***dihePhi;
     long unsigned int ***dihePsi;

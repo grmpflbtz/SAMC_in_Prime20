@@ -1168,7 +1168,7 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
     hd->hbmatr = "HBmat.dat";
     hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
-    hd->interintraMol = "inter-vs-intra-molecular-energies.dat";
+    hd->intrainterMol = "intra-vs-inter-molecular-energies.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->enertm = "Et.dat";
     hd->snapshots = "snapshots.dat";
@@ -1955,7 +1955,7 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
 bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step)
 {
     ofstream ostr;
-    ostr.open(hd->interintraMol, ios::out);
+    ostr.open(hd->intrainterMol, ios::out);
     if( ostr.is_open() ) {
         ostr << "# inter- vs. intra-molecular energies; #MC-steps=" << step << std::endl
              << "bin from hist vdW_intra vdW_inter HB_intra HB_inter" << std::endl;
@@ -1974,8 +1974,8 @@ bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step)
         return true;
     }
     else {
-        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->interintraMol << std::endl;
-        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->interintraMol << std::endl;
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->intrainterMol << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->intrainterMol << std::endl;
         return false;
     }
 }

@@ -75,7 +75,7 @@ struct Header {
     std::string hbmatr;         // output file name HB matrices
     std::string reenm;          // output file name end-to-end distance distribution
     std::string tGyrnm;         // output file name tensor of gyration
-    std::string interintraMol;  // output file name inter-vs-intra-molecular energies
+    std::string intrainterMol;  // output file name inter-vs-intra-molecular energies
     std::string grdcnm;         // output file name ground state configuration
     std::string enertm;         // output file name energy time development
     std::string snapshots;      // output file name snapshots

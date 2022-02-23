@@ -1957,8 +1957,10 @@ bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step)
     ofstream ostr;
     ostr.open(hd->intrainterMol, ios::out);
     if( ostr.is_open() ) {
-        ostr << "# inter- vs. intra-molecular energies; #MC-steps=" << step << std::endl
-             << "bin from hist vdW_intra vdW_inter HB_intra HB_inter" << std::endl;
+        ostr << "# intra- vs. inter-molecular energies" << std::endl
+             << "# N_CH=" << sp->N_CH << " N_AA=" << sp->N_AA << " seq=" << sp->AA_seq << std::endl
+             << "# no. MC-steps=" << step << std::endl
+             << "# bin from hist vdW_intra vdW_inter HB_intra HB_inter" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
             ostr << i << " " << std::setprecision(8) << sp->EMin+i*sp->BinW << " " << round(ot->intrainterE[i*5]);
             if( ot->intrainterE[i*5] == 0.0 ) {

@@ -181,6 +181,7 @@ int main(int argc, char *argv[])
     double dist[3];                                         // distance vector
     double distabs;                                         // absolute distance
     bool accept, newchn, ini_overlap;                       // acceptance value of move in SAMC; construction of new chain; overlapp in inital configuration
+    bool rlngE;                                             // was lng(E) file read
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
     int oldBox;                                             // variables for neighbour list calculations
     long unsigned int step, tcont;                          // time variables keeping track of # steps passed
@@ -296,10 +297,17 @@ int main(int argc, char *argv[])
         tcont = 0;
     }
     // check if there is an extra input file for lngE
+    rlngE = false;
     if( read_lngE(sp, hd, ot ) ) {
+        rlngE = true;
         tcont = 0;
-        if(sp->FIX_lngE) {
-            std::cout << "production run with fixed ln g(E)" << std::endl;
+    }
+    if(sp->FIX_lngE) {
+        hd->os_log<< "Production run: fixed ln g(E)" << std::endl;
+        std::cout << "Production run: fixed ln g(E)" << std::endl;
+        if( !rlngE ) {
+            hd->os_log<< "WARNING! no ln g(E) provided" << std::endl;
+            std::cout << "WARNING! no ln g(E) provided" << std::endl;
         }
     }
     if(sp->HB_ContMat) {
@@ -349,12 +357,12 @@ int main(int argc, char *argv[])
     newchn=false;
     if( readCoord(sp, hd, Chn) ) {
         if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
-            std::cout << "--- WARNING ---\toverlap in configuration from file '" << hd->confnm <<  "'" << std::endl;
+            std::cout << "--- WARNING --- overlap in configuration from file '" << hd->confnm <<  "'" << std::endl;
             ini_overlap = true;
         }
     }
     else {
-        std::cout << "building new chain(s) ... " << std::flush;
+        std::cout << "Building new chain(s) ......... " << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -373,7 +381,7 @@ int main(int argc, char *argv[])
         DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
         newchn = true;
         if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
-            std::cout << std::endl << "--- WARNING ---\toverlap in constructed configuration" << std::endl;
+            std::cout << "finished with overlaps" << std::endl;
             ini_overlap = true;
         }
         else { std::cout << "complete" << std::endl; }
@@ -413,7 +421,7 @@ int main(int argc, char *argv[])
 
     // move overlapping/new chains to legalize/randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     if( newchn || ini_overlap ) {
-        if( ini_overlap ) { std::cout << "    ---> trying to solve overlap in configuration" << std::endl; }
+        if( ini_overlap ) { std::cout << "-> Resolving overlaps in configuration" << std::endl; }
         else { std::cout << "Randomizing initial configuration" << std::endl; }
 
         step = 0;
@@ -422,14 +430,23 @@ int main(int argc, char *argv[])
             // end pre-SAMC movement after tStart moves and within desired energy window
             if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
                 if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == 0 ) {
-                    if(ini_overlap) { std::cout << "         completed overlap removal" << std::endl; }
-                    std::cout << "completed pre-SAMC moves after " << step << " steps" << std::endl << std::flush;
+                    //if(ini_overlap) { std::cout << "         completed overlap removal" << std::endl; }
+                    std::cout << "\rFinished pre-SAMC moves after " << step << " steps" << std::endl << std::flush;
                     break;
                 }
             }
 
             if( (sp->cluster_opt==0) && (step%1000 == 0) ) {
-                std::cout << "\r" << "pre-SAMC move " << step << std::flush;
+                if(step%10000 == 0)     { std::cout << "\r.....o....." << std::flush; }
+                if(step%10000 == 1000)  { std::cout << "\r....o.o...." << std::flush; }
+                if(step%10000 == 2000)  { std::cout << "\r...o...o..." << std::flush; }
+                if(step%10000 == 3000)  { std::cout << "\r..o.....o.." << std::flush; }
+                if(step%10000 == 4000)  { std::cout << "\r.o.......o." << std::flush; }
+                if(step%10000 == 5000)  { std::cout << "\ro.........o" << std::flush; }
+                if(step%10000 == 6000)  { std::cout << "\r.o.......o." << std::flush; }
+                if(step%10000 == 7000)  { std::cout << "\r..o.....o.." << std::flush; }
+                if(step%10000 == 8000)  { std::cout << "\r...o...o..." << std::flush; }
+                if(step%10000 == 9000)  { std::cout << "\r....o.o...." << std::flush; }
             }
             // HBList copy
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -1647,9 +1664,11 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
     stringstream inp_line_stream;
     string inp_line_string;
 
+    hd->os_log<< "Reading configuration input file '" << hd->confnm << "' ......... ";
+    std::cout << "Reading configuration input file '" << hd->confnm << "' ......... ";
+
     input.open(hd->confnm);
-    if( input.is_open() ) {
-        std::cout << "reading coordiates from input file '" << hd->confnm << "'" << std::endl;        
+    if( input.is_open() ) {     
         for( int j=0; j<sp->N_CH; j++ ) {
             Chn[j].setChnNo(j);
             Chn[j].AmAc.clear();
@@ -1714,11 +1733,13 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
 
         input.close();
         sp->tStart = 0;
+        hd->os_log<< "complete" << std::endl;
+        std::cout << "complete" << std::endl;
         return true;
     }
     else {
-        std::cerr << "could not open file '" << hd->confnm << "'" << endl;
-        hd->os_log<< "could not open file '" << hd->confnm << "'" << endl;
+        hd->os_log<< "File not found" << std::endl;
+        std::cout << "File not found" << std::endl;
         return false;
     }
 }
@@ -1734,7 +1755,8 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
 
     input.open(hd->rrunnm);
     if( input.is_open() ) {
-        std::cout << "reading rerun data from input file '" << hd->rrunnm << "'" << std::endl;
+        hd->os_log<< "Reading re-run input file '" << hd->rrunnm << "' ......... ";
+        std::cout << "Reading re-run input file '" << hd->rrunnm << "' ......... ";
         while( true ) {
             std::getline( input, s_line);
             if( s_line.length() == 0 ) {
@@ -1766,7 +1788,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             else break;
         }
         if( s_line[0] != 'b' ) {
-            std::cout << "Aaaaaarg! What a terrible misfortune came upon us in these miserable times of pain and agony?" << std::endl << " → expected 'bin' at start of line. Instead '" << s_line << "' was read" << std::endl;
+            std::cout << "--- ERROR ---\tExpected 'bin' at start of line. Instead '" << s_line << "' was read" << std::endl;
             input.close();
             return false;
         }
@@ -1789,10 +1811,10 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             }
         }
         input.close();
+        hd->os_log<< "complete" << std::endl;
+        std::cout << "complete" << std::endl;
         return true;
     }
-
-    std::cout << "unable to open input file '" << hd->rrunnm << "'" << std::endl;
     return false;
 }
 // reads lngE data from file
@@ -1804,9 +1826,11 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
     long unsigned int H;
     double Ebin1, Ebin2;
 
+    hd->os_log<< "Reading lng(E) input file '" << hd->lngEnm << "' ......... ";
+    std::cout << "Reading lng(E) input file '" << hd->lngEnm << "' ......... ";
+
     input.open(hd->lngEnm);
     if( input.is_open() ) {
-        std::cout << "reading lngE from input file '" << hd->lngEnm << "'" << std::endl;
         std::getline(input, s_line);
         if(s_line[0] != 'b') {
             std::cout << "unexpected character at start of line in file '" << hd->lngEnm << "': expected 'b', instead '" << s_line[0] << std::endl;
@@ -1831,10 +1855,13 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
             }
         }
         input.close();
+        hd->os_log<< "complete" << std::endl;
+        std::cout << "complete" << std::endl;
         return true;
     }
 
-    std::cout << "unable to open input file '" << hd->lngEnm << "'" << std::endl;
+    hd->os_log<< "File not found" << std::endl;
+    std::cout << "File not found" << std::endl;
     return false;
 }
 // writes file called "AnorLondo.txt" with coordinates of beads (debug purpose)

@@ -47,7 +47,6 @@ struct SysPara {
 
     int cluster_opt;        // cluster optimization [on/off]
 
-    bool EBIN_TRUNC_UP;     // sorting of integer energy state into upper or lower bin (nessessary to differentiate unambiguously in order to reproduce lngE)
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
     bool HB_ContMat;        // Hydrogen bond contact matrices
     bool Ree;               // end-to-end distance distribution
@@ -61,7 +60,7 @@ struct SysPara {
         double conf_dE;
         int conf_Nmax;
 
-    long unsigned int Seed; // seed for random number generator
+    long int Seed; // seed for random number generator
     int add_Seed;           // integer added to Seed (manipulate seed with program arguments)
 };
 

@@ -569,6 +569,7 @@ int main(int argc, char *argv[])
     outputPositions(sp, hd, hd->iniconf, Chn, 1, Eold);
 
     eBin_o = floor(((Eold-sp->EMin)/sp->BinW)-0.00001);
+    if( eBin_o == -1 ) { eBin_o = 0; }
     if(sp->dihedral) {
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             if( i%sp->N_AA != 0 ) {
@@ -774,10 +775,9 @@ int main(int argc, char *argv[])
                     continue;
                 }
                 // SAMC acceptance step
-                if(sp->EBIN_TRUNC_UP) { eBin_n = floor(((Enew-sp->EMin)/sp->BinW)+0.00001); }
-                else { eBin_n = floor(((Enew-sp->EMin)/sp->BinW)-0.00001); }
-                if( eBin_n == sp->NBin) { eBin_n = sp->NBin-1; }            // E=0 lands in non-existing bin → belongs to highest bin
-                if( eBin_n == -1 && Enew > sp->EMin-0.00001) { eBin_n = 0; }                  // E=EMin lands in non-existing bin if EBIN_TRUNK_UP = false → belongs to lowest bin
+                else { eBin_n = floor(((Enew-sp->EMin)/sp->BinW)-0.0000001); }
+                if( eBin_n == sp->NBin) { eBin_n = sp->NBin-1; }                    // E=0 lands in non-existing bin → belongs to highest bin
+                if( eBin_n == -1 && Enew > sp->EMin-0.00001) { eBin_n = 0; }        // E=EMin lands in non-existing bin → belongs to lowest bin
 
                 accept = acceptance(ot->lngE[eBin_o], ot->lngE[eBin_n]);
             }
@@ -1378,7 +1378,6 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_DTrn= 0;
     int read_DRot= 0;
     int read_ClOp= 0;
-    int read_ETru= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
     int read_Ree = 0;
@@ -1455,11 +1454,6 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->DROT_MAX = stod(value, nullptr); read_DRot = 1; }
                 else if( option.compare("cluster")==0 ) {
                     sp->cluster_opt = stoi(value, nullptr); read_ClOp = 1; }
-                else if( option.compare("EBIN_TRUNC_UP")==0 ) {
-                    if( value.compare("true")==0 ) { 
-                        sp->EBIN_TRUNC_UP = true; read_ETru = 1; }
-                    else if( value.compare("false")==0 ) { 
-                        sp->EBIN_TRUNC_UP = false; read_ETru = 1; } }
                 else if( option.compare("FIX_lngE")==0 ) {
                     if( value.compare("true")==0 ) { sp->FIX_lngE = true; read_FixL = 1; }
                     else if( value.compare("false")==0 ) { sp->FIX_lngE = false; read_FixL = 1; } }
@@ -1493,7 +1487,7 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("conf_NMax")==0 ) {
                     sp->conf_Nmax = stoi(value, nullptr); read_CNM = 1; }                
                 else if( option.compare("rng_seed")==0 ) {
-                    sp->Seed = stod(value, nullptr);  read_seed = 1; }
+                    sp->Seed = stol(value, nullptr);  read_seed = 1; }
             }
         }
 
@@ -1575,9 +1569,6 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_ClOp == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- clusterOptimization not found. " << std::endl; 
             hd->os_log << "--- ERROR --- clusterOptimization not found. " << std::endl;}
-        if( read_ETru == 0 ){ read_essential = false;
-            std::cout  << "--- ERROR --- EtruncUp not found. " << std::endl; 
-            hd->os_log << "--- ERROR --- EtruncUp not found. " << std::endl;}
         if( read_FixL == 0 ){ read_essential = false;
             std::cout  << "--- ERROR --- Fix_lngU not found. " << std::endl; 
             hd->os_log << "--- ERROR --- Fix_lngU not found. " << std::endl;}
@@ -3515,7 +3506,7 @@ int calc_HBenergy(SysPara *sp, Output *ot)
     ot->HBener[1] = 0;
     for(int i=0; i<sp->N_CH*sp->N_AA; i++) {
         if( HBList[i][0] > -1 ) {
-            if( HBList[i][0]/sp->N_AA == HBList[i][1]/sp->N_AA ) {
+            if( i/sp->N_AA == HBList[i][0]/sp->N_AA ) {
                 ot->HBener[0] -= 1.0;
             }
             else {

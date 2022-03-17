@@ -6,7 +6,7 @@
 // Declare engine - single instance for the whole code
 extern std::mt19937 my_rng;
 
-long unsigned int Seed(int seed);
+long int Seed(long int seed);
 double RND();
 
 #endif RND_HPP

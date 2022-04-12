@@ -302,6 +302,12 @@ int main(int argc, char *argv[])
         rlngE = true;
         tcont = 0;
     }
+
+    for( int i=0; i<sp->NBin; i++ ) {
+        std::cout << i << " " << std::setprecision(15) <<  ot->lngE[i] << std::endl;
+    }
+
+
     if(sp->FIX_lngE) {
         hd->os_log<< "Production run: fixed ln g(E)" << std::endl;
         std::cout << "Production run: fixed ln g(E)" << std::endl;
@@ -1825,34 +1831,37 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot)
     int num;
     long unsigned int H;
     double Ebin1, Ebin2;
+    int NBinInp = 0;
+
+    stringstream inp_line_stream;
+    string inp_line_string;
 
     hd->os_log<< "Reading lng(E) input file '" << hd->lngEnm << "' ......... ";
     std::cout << "Reading lng(E) input file '" << hd->lngEnm << "' ......... ";
 
     input.open(hd->lngEnm);
     if( input.is_open() ) {
-        std::getline(input, s_line);
-        if(s_line[0] != 'b') {
-            std::cout << "unexpected character at start of line in file '" << hd->lngEnm << "': expected 'b', instead '" << s_line[0] << std::endl;
-            input.close();
-            return false;
-        }
-        for( int i=0; i<sp->NBin; i++ ) {
-            if( input.good() ) {
-                input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> H;
-                if( num != i ) {
-                    hd->os_log<< "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
-                    std::cout << "--- ERROR ---\tBad line number " << num << " != " << i << std::endl;
-                    input.close();
-                    return false;
-                }
+
+        while( std::getline(input, inp_line_string) ) {
+            inp_line_stream.clear();
+            if( (inp_line_string.length() == 0) || (inp_line_string.at(0) == '#') || (inp_line_string.at(0) == 'b') || (inp_line_string.at(0) == 'B')) {
+                continue;
             }
-            else {
-                hd->os_log<< "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
-                std::cout << "--- ERROR ---\tencountered EOF inside lngE line << " << i << " expected " << sp->NBin-1 << std::endl;
+            inp_line_stream.str(inp_line_string);
+            inp_line_stream >> num >> Ebin1 >> Ebin2 >> ot->lngE[NBinInp] >> H;
+            if(NBinInp != num ) {
+                hd->os_log<< "--- ERROR ---\tBad line number " << num << " != " << NBinInp << std::endl;
+                std::cout << "--- ERROR ---\tBad line number " << num << " != " << NBinInp << std::endl;
                 input.close();
                 return false;
             }
+            NBinInp++;
+        }
+        if( NBinInp != sp->NBin ) {
+            hd->os_log<< "--- ERROR ---\tencountered EOF inside lngE line << " << NBinInp << " expected " << sp->NBin-1 << std::endl;
+            std::cout << "--- ERROR ---\tencountered EOF inside lngE line << " << NBinInp << " expected " << sp->NBin-1 << std::endl;
+            input.close();
+            return false;
         }
         input.close();
         hd->os_log<< "complete" << std::endl;

@@ -137,6 +137,7 @@ double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);      
 double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
 double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
 double E_check(SysPara *sp, Chain Chn[]);                                               // recalculate energy from scratch
+bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, int step);// compare Eold to E_check() and print warning if mismatched
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
 
 bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
@@ -303,11 +304,6 @@ int main(int argc, char *argv[])
         tcont = 0;
     }
 
-    for( int i=0; i<sp->NBin; i++ ) {
-        std::cout << i << " " << std::setprecision(15) <<  ot->lngE[i] << std::endl;
-    }
-
-
     if(sp->FIX_lngE) {
         hd->os_log<< "Production run: fixed ln g(E)" << std::endl;
         std::cout << "Production run: fixed ln g(E)" << std::endl;
@@ -393,10 +389,6 @@ int main(int argc, char *argv[])
         else { std::cout << "complete" << std::endl; }
     }
 
-
-    /*std::cout << "chain masses: " << std::endl << "Chn[0].getM()=" << Chn[0].getM() << std::endl << "Chn[1].getM()=" << Chn[1].getM() << std::endl;*/
-
-
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
         for(int j = 0; j < sp->N_CH*sp->N_AA; j++) {
@@ -424,6 +416,10 @@ int main(int argc, char *argv[])
 
     // position check file output
     outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+
+
+    Eold = E_check(sp, Chn);
+
 
     // move overlapping/new chains to legalize/randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
     if( newchn || ini_overlap ) {
@@ -1003,6 +999,8 @@ int main(int argc, char *argv[])
 
         // write Backup-File
         if( (step+1)%sp->T_WRITE == 0 ) {
+            E_error(sp, hd, Chn, Timer, Eold, step+1);
+
             if(!sp->FIX_lngE) {
                 BackupSAMCrun(sp, hd, ot, Chn, Timer, 1, step, gammasum, gamma, Eold);
             } else {
@@ -1029,6 +1027,7 @@ int main(int argc, char *argv[])
         }
 
         // Energy check
+        /*
         if( (step+1)%10000 == 0 ) {
             if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
                 hd->os_log<< endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
@@ -1042,8 +1041,14 @@ int main(int argc, char *argv[])
                 outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
 
                 std::cerr << "eternal darkness awaits…" << endl << std::flush;
+
+                if( floor(abs(Eold-E_check(sp, Chn))) == abs(Eold-E_check(sp, Chn))  ) {
+                    std::cout << "this is not only an HB fuckup" << std::flush;
+                    std::cout << std::endl;
+                }
+
             }
-        }
+        }*/
 
     }   // end of SAMC main loop
 
@@ -2168,11 +2173,13 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         backup << "# accepted " << ot->naccept[1] << " of " << ot->nattempt[1] << " (" << 100*(double)ot->naccept[1]/(double)ot->nattempt[1] << "%) of pivot moves" << std::endl;
         backup << "# accepted " << ot->naccept[2] << " of " << ot->nattempt[2] << " (" << 100*(double)ot->naccept[2]/(double)ot->nattempt[2] << "%) of translation moves" << std::endl;
         backup << "# accepted " << ot->naccept[3] << " of " << ot->nattempt[3] << " (" << 100*(double)ot->naccept[3]/(double)ot->nattempt[3] << "%) of chain rotation moves" << std::endl;
+        // lng(U) and histogram
         backup << "bin  from  to  lng  H" << std::endl;
         for( int i=0; i<sp->NBin; i++ ) {
             backup << i << " " << std::setprecision(8) << sp->EMin+i*sp->BinW << " " << std::setprecision(8) << sp->EMin+(i+1)*sp->BinW << " " << std::setprecision(15) << ot->lngE[i] << " " << ot->H[i] << std::endl;
         }
-        backup << "# current configuration ( E=" << std::setprecision(8) << E << ")" << std::endl;
+        // configuration
+        backup << "# current configuration (E=" << std::setprecision(8) << E << ")" << std::endl;
         backup << "beadID  x  y  z" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             backup << std::setw(2) << std::setfill('0') << i << "N " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[0].getBC(2)*sp->L << std::endl;
@@ -2180,6 +2187,12 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
             backup << std::setw(2) << std::setfill('0') << i << "O " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[2].getBC(2)*sp->L << std::endl;
             backup << std::setw(2) << std::setfill('0') << i << "R " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2)*sp->L << std::endl;
         }
+        // HB List
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            backup << i << "  " << HBList[i][0] << "\t" << HBList[i][1] << std::endl << std::flush;
+        }
+
+
         backup.close();
         return true;
     }
@@ -2547,6 +2560,45 @@ double E_check(SysPara *sp, Chain Chn[])
 
     return Energy;
 }
+
+// compare Eold to E_check() and print warning if mismatched
+bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, int step)
+{
+    double Echeck = E_check(sp, Chn);
+
+    if( abs(Eold-Echeck) > 0.0001 ) {
+
+        //Eold = Echeck;
+
+        hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: (running) Eold=" << std::fixed << std::setprecision(3) << Eold << "   (newly calculated) Ecur=" << Echeck << std::endl;
+        std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: (running) Eold=" << std::fixed << std::setprecision(3) << Eold << "   (newly calculated) Ecur=" << Echeck << std::endl;
+        hd->os_log << "time stamp: " << Timer.curRunTime() << std::endl;
+        hd->os_log << "MC step: " << step << std::endl;
+        hd->os_log << std::endl << "HBList:" << std::endl;
+        for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+            hd->os_log << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl;
+        }
+        hd->os_log << std::endl;
+        hd->os_log << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with seq. " << sp->AA_seq << " at E=" << Echeck << std::endl;
+        hd->os_log << sp->N_CH*sp->N_AA*4 << std::endl;
+        hd->os_log << setprecision(15) << std::fixed;
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                hd->os_log << Chn[i/sp->N_AA].getChnNo() << "-" << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].get_AAalp() << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].get_btype() << std::setw(3) << std::setfill('0') << i*4+j << " "
+                         << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(2)*sp->L << endl;
+            }
+        }
+        hd->os_log << std::endl;
+
+        //outputPositions(sp, hd, hd->lognm, Chn, 1, Echeck);
+        //hd->os_log.open(hd->lognm, ios::app);
+
+        return false;
+    }
+
+    return true;
+}
+
 // SAMC acceptance function
 bool acceptance(double lngEold, double lngEnew)
 {

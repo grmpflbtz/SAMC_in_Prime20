@@ -32,6 +32,7 @@ struct SysPara {
     int neighUpdate;        // update step for neighbor list
     int t_NLUpdate;         // steps passed since last neighbor list update
     int NeighListTest;      // tests integrity of LinkList and NeighHead every step [on/off]
+    int BondLengthTest;     // check bond length in whole chain at T_WRITE [on/off]
 
     int WT_WIGGLE;          // weight wiggle
     int WT_PIVOT;           // weight pivot moves

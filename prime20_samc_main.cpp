@@ -278,6 +278,7 @@ int main(int argc, char *argv[])
     sp->stepit = 4*sp->N_AA*sp->N_CH;
     sp->neighUpdate = (sp->LBOX-SW_HUGE)/sp->DISP_MAX;
     sp->NeighListTest = 0;
+    sp->BondLengthTest = 1;
     for( int i=0; i<4; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
@@ -387,6 +388,12 @@ int main(int argc, char *argv[])
             ini_overlap = true;
         }
         else { std::cout << "complete" << std::endl; }
+    }
+
+    // check integrity of configuration
+    if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
+        hd->os_log<< "--- ERROR ---\tBad bond length in starting configuration" << std::endl; hd->os_log.close();
+        std::cerr << "--- ERROR ---\tBad bond length in starting configuration" << std::endl; return 0;
     }
 
     // initialize HB list and N-C distance list
@@ -583,7 +590,8 @@ int main(int argc, char *argv[])
 
     }
     
-    std::cerr << std::endl << "starting with energy E=" << Eold << std::endl;
+    std::cerr << "starting with energy E=" << Eold << std::endl;
+    hd->os_log<< "starting with energy E=" << Eold << std::endl;
     // configuration when starting SAMC
     outputPositions(sp, hd, hd->iniconf, Chn, 1, Eold);
 
@@ -614,6 +622,12 @@ int main(int argc, char *argv[])
     for( step=tcont; step<sp->T_MAX; step++ ) {
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
+
+            /*
+            E_error(sp, hd, Chn, Timer, Eold, step);
+            if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
+                std::cout << "AAAAA" << std::endl;
+            }*/
 
             // print estimated remaining time
             if( sp->cluster_opt==0 && step%((int)1e3) == 0 ) {
@@ -997,10 +1011,18 @@ int main(int argc, char *argv[])
             }
         }
 
-        // write Backup-File
+        // Output: Backup and Observables + System Check
         if( (step+1)%sp->T_WRITE == 0 ) {
+            // system check
             E_error(sp, hd, Chn, Timer, Eold, step+1);
+            if(sp->BondLengthTest) {
+                checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA); 
+            }
+            if(sp->NeighListTest) {
+                CheckLinkListIntegrity(sp, Chn);
+            }
 
+            // output files
             if(!sp->FIX_lngE) {
                 BackupSAMCrun(sp, hd, ot, Chn, Timer, 1, step, gammasum, gamma, Eold);
             } else {
@@ -1025,30 +1047,6 @@ int main(int argc, char *argv[])
                 output_dihedral(sp, hd, ot, step+1);
             }
         }
-
-        // Energy check
-        /*
-        if( (step+1)%10000 == 0 ) {
-            if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
-                hd->os_log<< endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
-                std::cerr << endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << " at step=" << step << endl;
-                std::cerr << endl << "HBList" << endl;
-                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
-                    std::cerr << k << "  " << HBList[k][0] << "\t" << HBList[k][1] << std::endl << std::flush;
-                }
-                std::cerr << endl;
-
-                outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-
-                std::cerr << "eternal darkness awaits…" << endl << std::flush;
-
-                if( floor(abs(Eold-E_check(sp, Chn))) == abs(Eold-E_check(sp, Chn))  ) {
-                    std::cout << "this is not only an HB fuckup" << std::flush;
-                    std::cout << std::endl;
-                }
-
-            }
-        }*/
 
     }   // end of SAMC main loop
 
@@ -2188,6 +2186,7 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
             backup << std::setw(2) << std::setfill('0') << i << "R " << std::setprecision(15) << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[3].getBC(2)*sp->L << std::endl;
         }
         // HB List
+        backup << "# HBList (MonomerNo. Partner_of_N_bead Partner_of_C_bead)" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
             backup << i << "  " << HBList[i][0] << "\t" << HBList[i][1] << std::endl << std::flush;
         }
@@ -2383,7 +2382,9 @@ bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC)
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq)
 {
     if(h1==h2) {
-        if( (h1 == h2) && (abs(i1-i2) < 2) ) return 0;
+        if( (h1 == h2) && (abs(i1-i2) < 2) ) {
+            return 0;
+        }
     }
     if(d_sq <= SWDia(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2]) * SWDia(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2])) {
         return SWDepth(Chn[h1].AmAc[i1], Chn[h2].AmAc[i2]);
@@ -3271,61 +3272,61 @@ bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep)
         if( (i+1)%sypa->N_AA != 0 ) {
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, BND_NCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, PBND_NC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0), BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, BND_CaC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1), BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / PBND_CaN - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[0]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i+1, PBND_CaN, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CaCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i+1, PBND_CaCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2), BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / BND_CN - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[0]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[0]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i+1, BND_CN, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
                         i, i+1, PBND_CCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
@@ -3333,37 +3334,37 @@ bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep)
         else {
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, BND_NCa, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, PBND_NC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0), BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, BND_CaC, BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1), BND_FLUCT, absVec(distV) );
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+- %.3f)\tis %f\n", 
+                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
                         sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2), BND_FLUCT, absVec(distV) );
                         res = false;
             }

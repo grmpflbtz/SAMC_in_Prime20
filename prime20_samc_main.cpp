@@ -102,11 +102,12 @@ std::vector<std::vector<double>> NCDcpy;
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
+// algebraic operations
 double dotPro(double vecA[], double vecB[]);                                            // dot product
 double absVec(double vec[]);                                                            // absolute of vector
 tuple<double,double,double> crossPro(double vecA[], double vecB[]);                     // cross product
 tuple<double,double,double> distVecBC(SysPara *sp, Bead vecA, Bead vecB);               // distance vector
-
+// console output at system start
 int program_start_print(ostream &os);                                                   // prints simulation title to os
 int command_print(Header *hd, ostream &os);                                             // prints input/output file names
 int system_parameter_print(SysPara *sp, ostream &os);                                   // prints system parameters to os
@@ -114,15 +115,16 @@ int sim_parameter_print(SysPara *sp, ostream &os);                              
 int cur_time_print(ostream &os);                                                        // prints current time
 
 int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd);                 // identify file names from command input
-
+// read functions
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system parameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
 bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
-
+// output & observable functions
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
 bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step);                       // write hydrogen bond matrix
+// NEW OBSERVABLE: bool output_alpha_beta_hb(SysPara *sp, Header *hd, Output *ot, int step)                // write number of alpha and beta hydrogen bonds
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step);             // write inter- and intra-molecular energies
@@ -131,7 +133,7 @@ bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);            
 bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, int init);                 // write snapshots
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, int single_file, unsigned long int t);    // backup of observables for production run
-
+// energy functions
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
 double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
@@ -139,22 +141,23 @@ double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, i
 double E_check(SysPara *sp, Chain Chn[]);                                               // recalculate energy from scratch
 bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, int step);// compare Eold to E_check() and print warning if mismatched
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
-
+// MC move functions
 bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
 bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &deltaE);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
 bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
 bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
-
+// system integrity check functions
 bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+// maintenance functions
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
-
+// observable calculation functions
 int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate radius of gyration
 int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
 int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[]);                             // calculate van-der-Waals energy
 int calc_HBenergy(SysPara *sp, Output *ot);                                             // calculate HB energy
 double calc_phi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Phi
 double calc_psi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Psi
-
+// neighbour list functions
 int assignBox(SysPara *sp, Bead Bd);                                                    // assigns neighbour list box to bead
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
@@ -270,6 +273,8 @@ int main(int argc, char *argv[])
     ot->conf_Eprev = 100;
     ot->conf_Ntot = 0;
 
+    // programm start time
+    time(&sp->starttime);
     cur_time_print(std::cout);
     cur_time_print(hd->os_log);
 
@@ -390,12 +395,6 @@ int main(int argc, char *argv[])
         else { std::cout << "complete" << std::endl; }
     }
 
-    // check integrity of configuration
-    if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
-        hd->os_log<< "--- ERROR ---\tBad bond length in starting configuration" << std::endl; hd->os_log.close();
-        std::cerr << "--- ERROR ---\tBad bond length in starting configuration" << std::endl; return 0;
-    }
-
     // initialize HB list and N-C distance list
     for(int i = 0; i < sp->N_CH*sp->N_AA; i++) {
         for(int j = 0; j < sp->N_CH*sp->N_AA; j++) {
@@ -419,6 +418,12 @@ int main(int argc, char *argv[])
             }
         }
         Eold += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
+    }
+
+    // check integrity of configuration
+    if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
+        hd->os_log<< "--- ERROR ---\tBad bond length in starting configuration" << std::endl; hd->os_log.close();
+        std::cerr << "--- ERROR ---\tBad bond length in starting configuration" << std::endl; return 0;
     }
 
     // position check file output
@@ -1143,7 +1148,7 @@ int system_parameter_print(SysPara *sp, ostream &os)
 int sim_parameter_print(SysPara *sp, ostream &os)
 {
     int obs = 0;
-    os << "---------------------" << std::endl
+    os << "------------------------" << std::endl
        << ">> SAMC parameters <<" << std::endl
        << "Allowed energy range:     [" << sp->EMin << ";" << sp->EMax << "]" << std::endl
        << "N of energy bins:         " << sp ->NBin << std::endl
@@ -1155,7 +1160,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
             os << "T_0:                      " << sp->T_0 << std::endl
                << "gamma_0:                  " << sp->GAMMA_0 << std::endl; }
     os << "frequency of DOS output   " << sp->T_WRITE << std::endl
-       << "-----------------" << std::endl
+       << "------------------------" << std::endl
        << ">> observables <<" << std::endl;
         if( sp->HB_ContMat == true ) { obs = 1;
             os << "- Hydrogen bond contact matrices" << std::endl; }
@@ -1172,6 +1177,7 @@ int sim_parameter_print(SysPara *sp, ostream &os)
         if(obs == 0) {
             os << "... no observables" << std::endl;
         }
+    os << "------------------------" << std::endl;
 
     return 0;
 }
@@ -1251,7 +1257,8 @@ int cur_time_print(ostream &os)
 {
     time_t curtime;
     time(&curtime);
-    os << std::endl << "Start time: " << ctime(&curtime) << endl;
+    // os  << "Start time: " << ctime(&curtime) << std::endl;
+    os  << "Start time: " << ctime(&curtime);
     
     return 0;
 }
@@ -1711,11 +1718,6 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             i++;
         }
 
-        if(i != sp->N_CH*sp->N_AA*4) {
-            hd->os_log<< "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
-            std::cout << "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
-        }
-
         // PBC
         for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
             for( int k=0; k<3; k++ ) {
@@ -1744,6 +1746,12 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
         sp->tStart = 0;
         hd->os_log<< "complete" << std::endl;
         std::cout << "complete" << std::endl;
+
+        if(i != sp->N_CH*sp->N_AA*4) {
+            hd->os_log<< "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
+            std::cout << "--- ERROR ---\tincorrect number of beads: N_BB_real = " << i << "  N_BB_should = " << sp->N_AA*4 << std::endl;
+        }
+
         return true;
     }
     else {
@@ -1896,6 +1904,11 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
                          << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(0) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(0)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(1) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(1)*sp->L << " " << Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getR(2) + Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].getBC(2)*sp->L << endl;
             }
         }
+        // HB List
+        Checkpos << "# HBList\n# MonomerNo.  Partner_of_N_bead  Partner_of_C_bead" << std::endl;
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            Checkpos << i << "  " << HBList[i][0] << "\t" << HBList[i][1] << std::endl;
+        }
 
         Checkpos << std::endl;
         Checkpos.close();
@@ -1920,7 +1933,7 @@ bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step)
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     ostr << ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k]/ot->H[i] << " ";
                 }
-                ostr << std::endl;
+                ostr << "\n";
             }
         }
         ostr.close();
@@ -2160,6 +2173,7 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
 
     if( backup.is_open() ) {
         backup << "# SAMC simulation of " << sp->N_CH << " PRIME20 " << sp->N_AA << "-mer(s)" << std::endl;
+        backup << "# program start time " << ctime(&sp->starttime);
         backup << "# length of simulation box L = " << sp->L << std::endl;
         backup << "# sequence " << sp->AA_seq << std::endl;
         backup << "# number of MC steps: " << t+1 << ", with " << sp->stepit << " moves per step" << std::endl;
@@ -2188,7 +2202,7 @@ bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Time
         // HB List
         backup << "# HBList (MonomerNo. Partner_of_N_bead Partner_of_C_bead)" << std::endl;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
-            backup << i << "  " << HBList[i][0] << "\t" << HBList[i][1] << std::endl << std::flush;
+            backup << i << "  " << HBList[i][0] << "\t" << HBList[i][1] << std::endl;
         }
 
 
@@ -2221,6 +2235,7 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, int single
     results.open(name);
     if( results.is_open() ) {
         results << "# Production Run" << std::endl
+                << "# program start time " << ctime(&sp->starttime)
                 << "# N_CH = " << sp->N_CH << "; N_AA = " << sp->N_AA << std::endl
                 << "# sequence " << sp->AA_seq << std::endl
                 << "# length of simulation box L = " << sp->L << std::endl

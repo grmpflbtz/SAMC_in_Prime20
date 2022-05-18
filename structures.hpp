@@ -63,6 +63,8 @@ struct SysPara {
 
     long int Seed; // seed for random number generator
     int add_Seed;           // integer added to Seed (manipulate seed with program arguments)
+
+    time_t starttime;
 };
 
 struct Header {

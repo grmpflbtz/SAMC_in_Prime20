@@ -97,6 +97,7 @@ struct Output {
     double *rGyrCur;                // current radius of gyration
     double ***tGyrEig;              // sum of principal moments of tensor of gyration for each chain and energy bin
     double **tGyrEigCur;            // current principal moments of tensor of gyration
+        int tGyr_freq;              // frequency of gyration radius observable calculation
     double vdWener[2];              // intra- and inter-molecular van-der-Waals energy
     double HBener[2];               // intra- and inter-molecular HB energy
     double *intrainterE;            // inter- and intra-molecular energies

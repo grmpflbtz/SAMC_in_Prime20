@@ -93,10 +93,6 @@ std::vector<std::vector<int>> HBList;
 std::vector<std::vector<int>> HBLcpy;
 std::vector<std::vector<double>> NCDist;
 std::vector<std::vector<double>> NCDcpy;
-//int **HBList;
-//int **HBLcpy;
-//double **NCDist;
-//double **NCDcpy;
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   FUNCTION DECLARATIONS   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -252,13 +248,14 @@ int main(int argc, char *argv[])
         for( int i=0; i<sp->N_CH; i++) {
             ot->tGyrEig[i] = new double*[sp->NBin]; 
             for( int j=0; j<sp->NBin; j++ ) {
-                ot->tGyrEig[i][j] = new double[3]{};
+                ot->tGyrEig[i][j] = new double[4];
             }
         }
     ot->tGyrEigCur = new double*[sp->N_CH];
         for( int i=0; i<sp->N_CH; i++ ) { ot->tGyrEigCur[i] = new double[3]; }
+        ot->tGyr_freq = sp->N_CH*sp->N_AA*4;
     ot->intrainterE = new double[sp->NBin * 5];
-        ot->intrainterE_freq = 100;
+        ot->intrainterE_freq = sp->N_CH*sp->N_AA*4;
     ot->Et = new double[sp->T_WRITE];
     ot->dihePhi = new long unsigned int**[sp->NBin];
     ot->dihePsi = new long unsigned int**[sp->NBin];
@@ -331,6 +328,16 @@ int main(int argc, char *argv[])
     if(sp->Ree) {
         for( int i=0; i<sp->N_CH*sp->NBin; i++ ) {
             ot->Ree2[i] = 0;
+        }
+    }
+    if(sp->tGyr) {
+        for( int i=0; i<sp->N_CH; i++ ) {
+            for( int j=0; j<sp->NBin; j++ ) {
+                ot->rGyr[i][j] = 0;
+                for( int k=0; k<4; k++ ) {
+                    ot->tGyrEig[i][j][k] = 0;
+                }
+            }
         }
     }
     if(sp->intrainterMol) {
@@ -971,17 +978,6 @@ int main(int argc, char *argv[])
             if(sp->wConfig) {
                 output_snapshots(sp, hd, ot, Chn, Eold, 1);
             }
-            if(sp->tGyr) {
-                calc_gyration_tensor(sp, ot, Chn, eBin_o);
-                calc_gyration_radius(sp, ot, Chn, eBin_o);
-                
-                for( int i=0; i<sp->N_CH; i++ ) {
-                    if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-10) {
-                        std::cout << std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
-                        hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
-                    }
-                }
-            }
             if( Eold < Egrd ) {
                 Egrd = Eold;
                 outputPositions(sp, hd, hd->grdcnm, Chn, 0, Eold);
@@ -1002,7 +998,20 @@ int main(int argc, char *argv[])
         if(sp->Et) {
             ot->Et[step%sp->T_WRITE] = Eold;
         }
-
+        // gyration tensor eigenvalues
+        if(sp->tGyr) {
+            if(step%ot->tGyr_freq == 0) {
+                calc_gyration_tensor(sp, ot, Chn, eBin_o);
+                calc_gyration_radius(sp, ot, Chn, eBin_o);
+                
+                for( int i=0; i<sp->N_CH; i++ ) {
+                    if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-10) {
+                        std::cout << std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
+                        hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
+                    }
+                }
+            }
+        }
         // inter- vs. intra-molecular energies
         if(sp->intrainterMol) {
             if(step%ot->intrainterE_freq == 0 ) {
@@ -1975,15 +1984,25 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step)
     ostr.open(hd->tGyrnm, ios::out);
     if( ostr.is_open() ) {
         ostr << "# Eigenvalues of tensor of gyration after " << step << " steps" << std::endl
-             << "bin H Gxx Gyy Gzz" << std::endl;
+             << "bin from H";
         for( int i=0; i<sp->N_CH; i++ ) {
-            ostr << "chn" << i << std::endl;
-            for( int j=0; j<sp->NBin; j++ ) {
-                ostr << j << " " << ot->H[j];
+            ostr << " CH" << i << "(tGxx tGyy tGzz)";
+        }   ostr << std::endl;
+
+        for( int j=0; j<sp->NBin; j++ ) {
+            ostr << j << " " << std::setprecision(8) << sp->EMin+j*sp->BinW << " " << int(ot->tGyrEig[0][j][3]);
+            for( int i=0; i<sp->N_CH; i++ ) {
                 for( int k=0; k<3; k++ ) {
-                    ostr << " " << std::setprecision(4) << std::fixed << (ot->tGyrEig[i][j][k])/(ot->H[j]);
-                }   ostr << std::endl;
-            }
+                    if( ot->tGyrEig[i][j][3] != 0) {
+                        ostr << " " << std::setprecision(15) << (ot->tGyrEig[i][j][k])/(ot->tGyrEig[i][j][3]);
+                    }
+                    else {
+                        ostr << " " << std::setprecision(15) << (ot->tGyrEig[i][j][k]);
+                    }
+                }
+            } 
+            // ostr.unsetf(ios_base::fixed);
+            ostr << std::endl;
         }
         ostr.close();
         return true;
@@ -3548,9 +3567,10 @@ int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin)
         ot->tGyrEigCur[i][1] = rGyy;
         ot->tGyrEigCur[i][2] = rGzz;
         // summation of principal moments
-        ot->tGyrEig[i][eBin][0] += rGxx;
-        ot->tGyrEig[i][eBin][1] += rGyy;
-        ot->tGyrEig[i][eBin][2] += rGzz;
+        ot->tGyrEig[i][eBin][0] += rGxx;        // xx moment of gyration tensor
+        ot->tGyrEig[i][eBin][1] += rGyy;        // yy moment of gyration tensor
+        ot->tGyrEig[i][eBin][2] += rGzz;        // zz moment of gyration tensor
+        ot->tGyrEig[i][eBin][3] += 1;           // histogram
 
     }
 

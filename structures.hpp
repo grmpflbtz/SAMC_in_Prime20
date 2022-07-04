@@ -59,6 +59,7 @@ struct SysPara {
         double conf_EMax;
         double conf_EMin;
         double conf_dE;
+        int conf_dt;
         int conf_Nmax;
 
     long int Seed; // seed for random number generator
@@ -107,6 +108,7 @@ struct Output {
     long unsigned int ***dihePsi;
     int conf_Ntot;                  // # of total configs recorded
     double conf_Eprev;              // previously recorded energy
+    unsigned long conf_tprev;        // previously step recorded at
     long unsigned int nattempt[5];  // # of attempted moves
     long unsigned int naccept[5];   // # of accepted moves
 };

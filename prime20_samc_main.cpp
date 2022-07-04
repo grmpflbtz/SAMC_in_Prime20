@@ -126,7 +126,7 @@ bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                
 bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step);             // write inter- and intra-molecular energies
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
 bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);                    // write dihedral angles
-bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, int init);                 // write snapshots
+bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, unsigned long step, int init); // write snapshots
 bool BackupSAMCrun(SysPara *sp, Header *hd, Output *ot, Chain Chn[], Timer &Timer, int single_file, unsigned long int t, double gammasum, double gamma, double E);    // backup function in SAMC run
 bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, int single_file, unsigned long int t);    // backup of observables for production run
 // energy functions
@@ -268,6 +268,7 @@ int main(int argc, char *argv[])
             }
         }
     ot->conf_Eprev = 100;
+    ot->conf_tprev = 0;
     ot->conf_Ntot = 0;
 
     // programm start time
@@ -353,7 +354,7 @@ int main(int argc, char *argv[])
         output_Et(sp, hd, ot, 0, 0);
     }
     if(sp->wConfig) {
-        output_snapshots(sp, hd, ot, Chn, 0.0, 0);
+        output_snapshots(sp, hd, ot, Chn, 0.0, 0, 0);
     }
     if(sp->dihedral) {
         for( int i=0; i<sp->NBin; i++ ) {
@@ -976,7 +977,7 @@ int main(int argc, char *argv[])
                 }
             }
             if(sp->wConfig) {
-                output_snapshots(sp, hd, ot, Chn, Eold, 1);
+                output_snapshots(sp, hd, ot, Chn, Eold, step, 1);
             }
             if( Eold < Egrd ) {
                 Egrd = Eold;
@@ -1431,6 +1432,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_CEMa= 0;
     int read_CEMi= 0;
     int read_CdE = 0;
+    int read_Cdt = 0;
     int read_CNM = 0;
     int read_seed= 0;
 
@@ -1526,6 +1528,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                     sp->conf_EMin = stod(value, nullptr); read_CEMi = 1; }
                 else if( option.compare("conf_dE")==0 ) {
                     sp->conf_dE = stod(value, nullptr); read_CdE = 1; }
+                else if( option.compare("conf_dt")==0 ) {
+                    istringstream constr(value); constr >> d;
+                    sp->conf_dt = round(d); read_Cdt = 1; }
                 else if( option.compare("conf_NMax")==0 ) {
                     sp->conf_Nmax = stoi(value, nullptr); read_CNM = 1; }                
                 else if( option.compare("rng_seed")==0 ) {
@@ -1654,7 +1659,9 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( read_CEMi == 0 ){ read_observ = false;
             sp->conf_EMin = sp->EMin;}
         if( read_CdE == 0 ){ read_observ = false;
-            sp->conf_dE = 2.0;}
+            sp->conf_dE = 0.1;}
+        if( read_Cdt == 0 ){ read_observ = false;
+            sp->conf_dt = 1;}
         if( read_CNM == 0 ){ read_observ = false;
             sp->conf_Nmax = 50;}
         if( read_seed == 0 ){
@@ -2137,7 +2144,7 @@ bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step)
     return true;
 }
 // write snapshots
-bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, int init)
+bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, unsigned long step, int init)
 {
     ofstream ostr;
 
@@ -2156,12 +2163,15 @@ bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double e
         }
     }
     else if( init == 1 ) {
-        if( ot->conf_Ntot < sp->conf_Nmax ) {
-            if( abs(ot->conf_Eprev - ener) >= sp->conf_dE ) {
-                ot->conf_Eprev = ener;
-                if( (ener >= sp->conf_EMin) && (ener <= sp->conf_EMax)) {
-                    outputPositions(sp, hd, hd->snapshots, Chn, 1, ener);
-                    ot->conf_Ntot++;
+        if( (step - ot->conf_tprev) >= sp->conf_dt ) {
+            if( ot->conf_Ntot < sp->conf_Nmax ) {
+                if( abs(ot->conf_Eprev - ener) >= sp->conf_dE ) {
+                    ot->conf_Eprev = ener;
+                    if( (ener >= sp->conf_EMin) && (ener <= sp->conf_EMax)) {
+                        outputPositions(sp, hd, hd->snapshots, Chn, 1, ener);
+                        ot->conf_Ntot++;
+                        ot->conf_tprev = step;
+                    }
                 }
             }
         }

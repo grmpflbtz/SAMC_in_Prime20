@@ -132,18 +132,18 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, int single
 // energy functions
 bool HBcheck(SysPara *sp, Chain Chn[], int iN, int iC);                                 // check if HB exists and update HBList
 double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq);              // energy of single SC interaction
-double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
-double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
-double E_check(SysPara *sp, Chain Chn[]);                                               // recalculate energy from scratch
+double EO_SegBead(SysPara *sypa, Header *hd, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch, bool findalloverlap); // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+double EO_SegSeg(SysPara *sp, Header *hd, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch);        // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
+double E_check(SysPara *sp, Header *hd, Chain Chn[]);                                               // recalculate energy from scratch
 bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, int step);// compare Eold to E_check() and print warning if mismatched
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
 // MC move functions
-bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
-bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &deltaE);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
-bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
-bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
+bool wiggle(SysPara *sp, Header *hd, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
+bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
+bool translation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
+bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
 // system integrity check functions
-bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
+bool checkBndLngth(SysPara *sypa, Header *hd, Chain Chn[], int sp, int ep);                         // check all bond length from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
 // maintenance functions
 bool resetBCcouter(SysPara *sp, Chain Chn[]);                                           // resets the counter of boundary crossings so that the real coordinates move back to the simulation box
 // observable calculation functions
@@ -372,13 +372,18 @@ int main(int argc, char *argv[])
     ini_overlap=false;
     newchn=false;
     if( readCoord(sp, hd, Chn) ) {
-        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
-            std::cout << "--- WARNING --- overlap in configuration from file '" << hd->confnm <<  "'" << std::endl;
-            ini_overlap = true;
+        // overlap check
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++) {
+            for( int j=0; j<4; j++) {
+                if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0, true) == -1 ) {
+                    ini_overlap = true;
+                }
+            }
         }
     }
     else {
-        std::cout << "Building new chain(s) ......... " << std::flush;
+        std::cout << "Building new chain(s) ......... \n" << std::flush;
+        hd->os_log<< "Building new chain(s) ......... \n" << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -396,11 +401,21 @@ int main(int argc, char *argv[])
         // setup DiaSQValues Matrix
         DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
         newchn = true;
-        if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
-            std::cout << "finished with overlaps" << std::endl;
-            ini_overlap = true;
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++) {
+            for( int j=0; j<4; j++) {
+                if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0, true) == -1 ) {
+                    ini_overlap = true;
+                }
+            }
         }
-        else { std::cout << "complete" << std::endl; }
+        if( !ini_overlap ) { 
+            std::cout << " ......... complete" << std::endl; 
+            hd->os_log<< " ......... complete" << std::endl; 
+        }
+        else {
+            std::cout << " ......... finished with overlap" << std::endl;
+            hd->os_log<< " ......... finished with overlap" << std::endl;
+        }
     }
 
     // initialize HB list and N-C distance list
@@ -425,11 +440,11 @@ int main(int argc, char *argv[])
                 Eold -= 1.0;
             }
         }
-        Eold += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
+        Eold += EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1, false);
     }
 
     // check integrity of configuration
-    if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
+    if(!checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA)) {
         hd->os_log<< "--- ERROR ---\tBad bond length in starting configuration" << std::endl; hd->os_log.close();
         std::cerr << "--- ERROR ---\tBad bond length in starting configuration" << std::endl; return 0;
     }
@@ -438,7 +453,7 @@ int main(int argc, char *argv[])
     outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
 
-    Eold = E_check(sp, Chn);
+    Eold = E_check(sp, hd, Chn);
 
 
     // move overlapping/new chains to legalize/randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
@@ -451,7 +466,7 @@ int main(int argc, char *argv[])
         while( true ) {
             // end pre-SAMC movement after tStart moves and within desired energy window
             if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
-                if(EO_SegSeg(sp, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == 0 ) {
+                if(EO_SegSeg(sp, hd, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == 0 ) {
                     //if(ini_overlap) { std::cout << "         completed overlap removal" << std::endl; }
                     std::cout << "\rFinished pre-SAMC moves after " << step << " steps" << std::endl << std::flush;
                     break;
@@ -459,16 +474,16 @@ int main(int argc, char *argv[])
             }
 
             if( (sp->cluster_opt==0) && (step%1000 == 0) ) {
-                if(step%10000 == 0)     { std::cout << "\r.....o....." << std::flush; }
-                if(step%10000 == 1000)  { std::cout << "\r....o.o...." << std::flush; }
-                if(step%10000 == 2000)  { std::cout << "\r...o...o..." << std::flush; }
-                if(step%10000 == 3000)  { std::cout << "\r..o.....o.." << std::flush; }
-                if(step%10000 == 4000)  { std::cout << "\r.o.......o." << std::flush; }
-                if(step%10000 == 5000)  { std::cout << "\ro.........o" << std::flush; }
-                if(step%10000 == 6000)  { std::cout << "\r.o.......o." << std::flush; }
-                if(step%10000 == 7000)  { std::cout << "\r..o.....o.." << std::flush; }
-                if(step%10000 == 8000)  { std::cout << "\r...o...o..." << std::flush; }
-                if(step%10000 == 9000)  { std::cout << "\r....o.o...." << std::flush; }
+                if(step%10000 == 0)     { std::cout << "\ro........." << std::flush; }
+                if(step%10000 == 1000)  { std::cout << "\r.o........" << std::flush; }
+                if(step%10000 == 2000)  { std::cout << "\r..o......." << std::flush; }
+                if(step%10000 == 3000)  { std::cout << "\r...o......" << std::flush; }
+                if(step%10000 == 4000)  { std::cout << "\r....o....." << std::flush; }
+                if(step%10000 == 5000)  { std::cout << "\r.....o...." << std::flush; }
+                if(step%10000 == 6000)  { std::cout << "\r......o..." << std::flush; }
+                if(step%10000 == 7000)  { std::cout << "\r.......o.." << std::flush; }
+                if(step%10000 == 8000)  { std::cout << "\r........o." << std::flush; }
+                if(step%10000 == 9000)  { std::cout << "\r.........o" << std::flush; }
             }
             // HBList copy
             for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -492,20 +507,20 @@ int main(int argc, char *argv[])
                     i_rand = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA*4));
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
-                    accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
+                    accept = wiggle(sp, hd, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                     break;
                 case 1:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
                     jp = trunc(((double)RND()/((double)my_rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
-                    accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
+                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
-                    accept = translation(sp, Chn, ip, deltaE);
+                    accept = translation(sp, hd, Chn, ip, deltaE);
                     break;
                 case 3:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
-                    accept = rotation(sp, Chn, ip, deltaE);
+                    accept = rotation(sp, hd, Chn, ip, deltaE);
                     break;
                 default:
                     std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
@@ -571,10 +586,10 @@ int main(int argc, char *argv[])
                 this_thread::sleep_for(chrono::milliseconds(200));
                 return 0;
             }*/            
-            if( abs(Eold-E_check(sp, Chn)) > 0.01 ) {
-                double Ecur = E_check(sp, Chn);
-                hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl; hd->os_log.close();
-                std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, Chn) << std::endl;
+            if( abs(Eold-E_check(sp, hd, Chn)) > 0.01 ) {
+                double Ecur = E_check(sp, hd, Chn);
+                hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, hd, Chn) << std::endl; hd->os_log.close();
+                std::cerr << std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, hd, Chn) << std::endl;
                 std::cerr.precision(3); std::cerr << std::fixed;
                 std::cerr << "NCDist:" << std::endl;
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
@@ -674,7 +689,7 @@ int main(int argc, char *argv[])
                     ip = i_rand/4;                              // amino acid identifier
                     jp = i_rand%4;                              // bead
                     BdCpy[ip*4+jp] = Chn[ip/sp->N_AA].AmAc[ip%sp->N_AA].Bd[jp];
-                    accept = wiggle(sp, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
+                    accept = wiggle(sp, hd, Chn, ip/sp->N_AA, ip%sp->N_AA, jp, deltaE);
                     break;
                 case 1:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
@@ -693,7 +708,7 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
-                    accept = Pivot(sp, Chn, ip, jp/2, jp%2, deltaE);
+                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE);
                     break;
                 case 2:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
@@ -702,7 +717,7 @@ int main(int argc, char *argv[])
                             BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
                         }
                     }
-                    accept = translation(sp, Chn, ip, deltaE);
+                    accept = translation(sp, hd, Chn, ip, deltaE);
                     break;
                 case 3:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
@@ -711,7 +726,7 @@ int main(int argc, char *argv[])
                             BdCpy[ip*sp->N_AA*4+i*4+j] = Chn[ip].AmAc[i].Bd[j];
                         }
                     }
-                    accept = rotation(sp, Chn, ip, deltaE);
+                    accept = rotation(sp, hd, Chn, ip, deltaE);
                     break;
                 default:
                     std::cerr << "Unusable move type selected: movetype = " << movetype << endl;
@@ -1031,7 +1046,7 @@ int main(int argc, char *argv[])
             // system check
             E_error(sp, hd, Chn, Timer, Eold, step+1);
             if(sp->BondLengthTest) {
-                checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA); 
+                checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA); 
             }
             if(sp->NeighListTest) {
                 CheckLinkListIntegrity(sp, Chn);
@@ -2436,7 +2451,7 @@ double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq)
     return 0;
 }
 // SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
-double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch)
+double EO_SegBead(SysPara *sypa, Header *hd, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch, bool findalloverlap)
 {
     int neighBox[3], centrBox[3];
     int searchBox, index;
@@ -2472,7 +2487,14 @@ double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, in
                         return -1.0; 
                     }*/
                     if( dist2 < DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] ) { 
-                        return -1.0; 
+                        if( findalloverlap ) {
+                            std::cout << "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n";
+                            hd->os_log<< "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n";
+                            energy = -1;
+                        }
+                        else{
+                            return -1.0; 
+                        }
                     }
                 }
             }
@@ -2496,7 +2518,7 @@ double EO_SegBead(SysPara *sypa, Chain Chn[], int h1, int i1, int j1, int sp, in
     return energy;
 }
 // SC interaction energy of segment [sp1,ep1) versus segment [sp2,ep2). also overlapp check
-double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch) 
+double EO_SegSeg(SysPara *sp, Header *hd, Chain Chn[], int sp1, int ep1, int sp2, int ep2, int EOswitch) 
 {
     double dEnergy;
     double energy = 0;
@@ -2504,7 +2526,7 @@ double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, i
     for( int i=sp1; i<ep1; i++ ) {
         for( int j=0; j<4; j++ ) {
             if( EOswitch == 1 && j != 3) continue;  // skip energy calculation for non-SC beads
-            dEnergy = EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, j, sp2, ep2, EOswitch);
+            dEnergy = EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, sp2, ep2, EOswitch, false);
             if( dEnergy == -1 ) return -1;          // exit if overlapp check fails
             energy += dEnergy;
         }
@@ -2513,7 +2535,7 @@ double EO_SegSeg(SysPara *sp, Chain Chn[], int sp1, int ep1, int sp2, int ep2, i
     return energy;
 }
 // calculates total energy from scratch
-double E_check(SysPara *sp, Chain Chn[])
+double E_check(SysPara *sp, Header *hd, Chain Chn[])
 {
     int HBL_check[sp->N_CH*sp->N_AA][2], HBerrN[sp->N_CH*sp->N_AA][2], HBerrC[sp->N_CH*sp->N_AA][2];
     double NCD_check[sp->N_CH*sp->N_AA][sp->N_CH*sp->N_AA];
@@ -2550,7 +2572,7 @@ double E_check(SysPara *sp, Chain Chn[])
                 Energy -= 1.0; 
             }
         }
-        Energy += EO_SegBead(sp, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1);
+        Energy += EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, 3, i, sp->N_CH*sp->N_AA, 1, false);
     }
     // disagreements between HBList and HBL_check
     for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
@@ -2609,7 +2631,7 @@ double E_check(SysPara *sp, Chain Chn[])
 // compare Eold to E_check() and print warning if mismatched
 bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, int step)
 {
-    double Echeck = E_check(sp, Chn);
+    double Echeck = E_check(sp, hd, Chn);
 
     if( abs(Eold-Echeck) > 0.0001 ) {
 
@@ -2658,7 +2680,7 @@ bool acceptance(double lngEold, double lngEnew)
 //          XXXXXXXXXXXXXX  MOVE FUNCTIONS  XXXXXXXXXXXXXX
 
 // small displacement of Chn[h].AmAc[i].Bd[j]
-bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
+bool wiggle(SysPara *sp, Header *hd, Chain Chn[], int h, int i, int j, double &deltaE)
 {
     Bead cpy;                       // copy of bead to be wiggled, wiggled bead
     double disp[3], dist[3];        // random displacement vector, distance vector
@@ -2668,7 +2690,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
 
     // calculate old energy contribution of SC if j==3
     if( j == 3 ) {
-        Eold = EO_SegBead(sp, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 1);
+        Eold = EO_SegBead(sp, hd, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 1, false);
     }
     
     // calculate displacement vector (disp[]) and move bead
@@ -2740,7 +2762,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
             break;
     }
     // perform overlap check
-    if(EO_SegBead(sp, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 0) == -1) {
+    if(EO_SegBead(sp, hd, Chn, h, i, j, 0, sp->N_AA*sp->N_CH, 0, false) == -1) {
         Chn[h].AmAc[i].Bd[j] = cpy;
         return false;
     }
@@ -2847,7 +2869,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
             }
             break;
         case 3:
-            deltaE += EO_SegBead(sp, Chn, h, i, j, 0, sp->N_CH*sp->N_AA, 1) - Eold;
+            deltaE += EO_SegBead(sp, hd, Chn, h, i, j, 0, sp->N_CH*sp->N_AA, 1, false) - Eold;
     }
     // previously broken HB can build new HB
     switch(j) {
@@ -2908,7 +2930,7 @@ bool wiggle(SysPara *sp, Chain Chn[], int h, int i, int j, double &deltaE)
     return true;
 }
 // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
-bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &deltaE)
+bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE)
 {
     Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
     double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
@@ -2927,7 +2949,7 @@ bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &del
         sp = (part == 0) ? ((res/sypa->N_AA)*sypa->N_AA):(res+1);             // identify start of rotated chain segment
         ep = (part == 0) ? (res+1):(((res/sypa->N_AA)+1)*sypa->N_AA);         // identify end of rotated chain segment
     }
-    Eold = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1);
+    Eold = EO_SegSeg(sypa, hd, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, hd, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1);
     // copy relevant part of the chain
     for( int i=sp; i<ep; i++ ) {
         for( int j=0; j<4; j++ ) {
@@ -2968,7 +2990,7 @@ bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &del
             Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
             
             // overlapp check
-            if( EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, sp, 0) == -1 || EO_SegBead(sypa, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ep, sypa->N_CH*sypa->N_AA, 0) == -1 ) {
+            if( EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, sp, 0, false) == -1 || EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ep, sypa->N_CH*sypa->N_AA, 0, false) == -1 ) {
                 for( int k=sp; k<i+1; k++ ) {
                     for( int m=0; m<4; m++ ) {
                         Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
@@ -3083,12 +3105,12 @@ bool Pivot(SysPara *sypa, Chain Chn[], int res, int pivan, int part, double &del
         }
     }
     // SC interactions
-    deltaE = EO_SegSeg(sypa, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sypa, hd, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, hd, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // translation move of a whole chain
-bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
+bool translation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE)
 {
     Bead BdCpy[4*sp->N_AA];                 // copy of beads in moved chain
     double dVec[3], newpos[3];          // displacement vector, new position (before PBC)
@@ -3100,7 +3122,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
             BdCpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
         }
     }
-    Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
+    Eold = EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
     for( int i=0; i<3; i++ ) {
         dVec[i] = ( ((double)RND()/(double)my_rng.max())*2 - 1. )*sp->DTRN_MAX;
     }
@@ -3114,7 +3136,7 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
             }
             Chn[iChn].AmAc[i].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
             // overlapp check
-            if( EO_SegBead(sp, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0) == -1 || EO_SegBead(sp, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0) == -1 ) {
+            if( EO_SegBead(sp, hd, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0, false) == -1 || EO_SegBead(sp, hd, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0, false) == -1 ) {
                 for( int m=0; m<i+1; m++ ) {
                     for( int n=0; n<4; n++ ) {
                         Chn[iChn].AmAc[m].Bd[n] = BdCpy[m*4+n];     // reset chain & exit
@@ -3175,12 +3197,12 @@ bool translation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
         }
     }
 
-    deltaE = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // rotation move of a whole chain
-bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
+bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE)
 {
     Bead BdCpy[4*sp->N_AA];
     double Eold, dEhb, dist2;
@@ -3194,7 +3216,7 @@ bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
             BdCpy[i*4+j] = Chn[iChn].AmAc[i].Bd[j];
         }
     }
-    Eold = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
+    Eold = EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1);
 
     angle = ((double)RND()/(double)my_rng.max()) * sp->DROT_MAX;       // angle of rotation
     cos_a = cos(angle); sin_a = sin(angle);
@@ -3234,7 +3256,7 @@ bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
             }
             Chn[iChn].AmAc[i].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
             // overlapp check
-            if( EO_SegBead(sp, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0) == -1 || EO_SegBead(sp, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0 ) ) {
+            if( EO_SegBead(sp, hd, Chn, iChn, i, j, 0, iChn*sp->N_AA, 0, false) == -1 || EO_SegBead(sp, hd, Chn, iChn, i, j, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 0, false) ) {
                 for( int k=0; k<i+1; k++ ) {
                     for( int m=0; m<4; m++ ) {
                         Chn[iChn].AmAc[k].Bd[m] = BdCpy[k*4+m];        // reset chain & exit
@@ -3300,12 +3322,12 @@ bool rotation(SysPara *sp, Chain Chn[], int iChn, double &deltaE)
         }
     }
 
-    deltaE = EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
+    deltaE = EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, 0, iChn*sp->N_AA, 1) + EO_SegSeg(sp, hd, Chn, iChn*sp->N_AA, (iChn+1)*sp->N_AA, (iChn+1)*sp->N_AA, sp->N_CH*sp->N_AA, 1) + dEhb - Eold;
 
     return true;
 }
 // check all bond lenght from Chn[sp/N_AA].AmAc[sp%N_AA] to Chn[ep/N_AA].AmAc[ep%N_AA]
-bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep)
+bool checkBndLngth(SysPara *sypa, Header *hd, Chain Chn[], int sp, int ep)
 {
     double distV[3];
     double dist2;
@@ -3316,100 +3338,100 @@ bool checkBndLngth(SysPara *sypa, Chain Chn[], int sp, int ep)
         if( (i+1)%sypa->N_AA != 0 ) {
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, BND_NCa, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << BND_NCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << BND_NCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, PBND_NC, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << PBND_NC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << PBND_NC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[0], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[0] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(0) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, BND_CaC, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << BND_CaC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << BND_CaC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(1) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / PBND_CaN - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[0]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i+1, PBND_CaN, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i+1 << "].Bd[0]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CaN << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i+1 << "].Bd[0]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CaN << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[1], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CaCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i+1, PBND_CaCa, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i+1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CaCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[1] and AmAc[" << i+1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CaCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].getDisR(2) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[0]);
             if( abs( absVec(distV) / BND_CN - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[0]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i+1, BND_CN, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i+1 << "].Bd[0]:\t should be " << std::setprecision(2)<<std::fixed << BND_CN << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i+1 << "].Bd[0]:\t should be " << std::setprecision(2)<<std::fixed << BND_CN << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[2], Chn[i/sypa->N_AA].AmAc[(i+1)%sypa->N_AA].Bd[1]);
             if( abs( absVec(distV) / PBND_CCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        i, i+1, PBND_CCa, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i+1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << i << "].Bd[2] and AmAc[" << i+1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << PBND_CCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
         }
         else {
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1]);
             if( abs( absVec(distV) / BND_NCa - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[1]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, BND_NCa, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << BND_NCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[1]:\t should be " << std::setprecision(2)<<std::fixed << BND_NCa << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / PBND_NC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, PBND_NC, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << PBND_NC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << PBND_NC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[0], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[0]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[0] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(0) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2]);
             if( abs( absVec(distV) / BND_CaC - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[2]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, BND_CaC, BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[1] and AmAc[" << sypa->N_AA-1 << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << BND_CaC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[1] and AmAc[" << sypa->N_AA-1 << "].Bd[2]:\t should be " << std::setprecision(2)<<std::fixed << BND_CaC << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[1], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[1]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[1] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[1] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(1) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
             std::tie(distV[0], distV[1], distV[2]) = distVecBC(sypa, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[2], Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].Bd[3]);
             if( abs( absVec(distV) / Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2) - 1.0 ) > BND_FLUCT+0.01 ) {
-                printf("Invalid bond length between AmAc[%d].Bd[2]] and AmAc[%d].Bd[3]:\t should be %4.2f (+-%.3f) is %f\n", 
-                        sypa->N_AA-1, sypa->N_AA-1, Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2), BND_FLUCT, absVec(distV) );
+                std::cerr << "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[2] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
+                hd->os_log<< "Invalid bond length between AmAc[" << sypa->N_AA-1 << "].Bd[2] and AmAc[" << sypa->N_AA-1 << "].Bd[3]:\t should be " << std::setprecision(2)<<std::fixed << Chn[i/sypa->N_AA].AmAc[sypa->N_AA-1].getDisR(2) << " (+-" << std::setprecision(3) << BND_FLUCT << ") is "<< std::setprecision(6) << absVec(distV) << "\n";
                         res = false;
             }
         }

@@ -382,7 +382,8 @@ int main(int argc, char *argv[])
         }
     }
     else {
-        std::cout << "Building new chain(s) ......... " << std::flush;
+        std::cout << "Building new chain(s) ......... \n" << std::flush;
+        hd->os_log<< "Building new chain(s) ......... \n" << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
             newChain(sp, Chn, i);
             for( int m=0; m<i+1; m++) {
@@ -400,11 +401,21 @@ int main(int argc, char *argv[])
         // setup DiaSQValues Matrix
         DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
         newchn = true;
-        if(EO_SegSeg(sp, hd, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == -1 ) { 
-            std::cout << "finished with overlaps" << std::endl;
-            ini_overlap = true;
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++) {
+            for( int j=0; j<4; j++) {
+                if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0, true) == -1 ) {
+                    ini_overlap = true;
+                }
+            }
         }
-        else { std::cout << "complete" << std::endl; }
+        if( !ini_overlap ) { 
+            std::cout << " ......... complete" << std::endl; 
+            hd->os_log<< " ......... complete" << std::endl; 
+        }
+        else {
+            std::cout << " ......... finished with overlap" << std::endl;
+            hd->os_log<< " ......... finished with overlap" << std::endl;
+        }
     }
 
     // initialize HB list and N-C distance list

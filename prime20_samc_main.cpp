@@ -139,7 +139,7 @@ bool E_error(SysPara *sp, Header *hd, Chain Chn[], Timer &Timer, double &Eold, i
 bool acceptance(double lngEold, double lngEnew);                                        // SAMC acceptance function
 // MC move functions
 bool wiggle(SysPara *sp, Header *hd, Chain Chn[], int h, int i, int j, double &deltaE);             // small displacement of Chn[h].AmAc[i].Bd[j]
-bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
+bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE, int set_angle, double angle);   // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
 bool translation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE);                   // translation move of the whole chain
 bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE);                      // rotation move of the whole Chain
 // system integrity check functions
@@ -450,10 +450,92 @@ int main(int argc, char *argv[])
     }
 
     // position check file output
-    outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+    //outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+
+    // systematically rotate dihedral angles to get legal conformation
+
+    double Phi_angle;
+    double Psi_angle;
+    bool legal_conf_found;
+    bool aa_overlap;
+    int pm_angle_1, pm_angle_2;
+    for( int i=1; i<sp->N_AA; i++ ) {
+
+        outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+
+
+        for( int j=0; j<200; j++ ) {
+            if( j%2==0) { pm_angle_1 = 1; }
+            else{ pm_angle_1 = -1; }
+            for( int k=0; k<200; k++ ) {
+                if( k%2==0) { pm_angle_2 = 1; }
+                else{ pm_angle_2 = -1; }
+                Psi_angle = pm_angle_1*(j/2)*2*M_PI/200.0;
+                Phi_angle = pm_angle_2*(k/2)*2*M_PI/200.0;
+                deltaE = 0.0;
+                legal_conf_found = false;
+
+
+                //if(i==40) { Phi_angle = -M_PI/3.0; }
+
+
+                // copy of chain in case of revert
+                for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                    for( int n=0; n<4; n++ ) {
+                        BdCpy[m*4+n] = Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n];
+                    }
+                }
+
+                // pivot rotation
+                Pivot(sp, hd, Chn, i, 0, 0, deltaE, 1, Phi_angle );
+                Pivot(sp, hd, Chn, i, 1, 0, deltaE, 1, Psi_angle );
+
+                for( int m=0; m<sp->N_AA; m++ ) {
+                    for( int n=0; n<4; n++ ) {
+                        LinkListUpdate(sp, Chn, m, n);
+                    }
+                }
+                
+                // check overlap to previously rotated chain segment
+                aa_overlap = false;
+                for (int n = 0; n < 4; n++){
+                    if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i, n, 0, i, 0, false) == -1 ) {
+                        aa_overlap = true;
+                    }
+                }
+                if(!aa_overlap) {
+                    legal_conf_found = true;
+                }
+                if(legal_conf_found) {
+                    break;
+                }
+                // REVERT
+                // copy of chain in case of revert
+                for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                    for( int n=0; n<4; n++ ) {
+                        Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n] = BdCpy[m*4+n];
+                    }
+                }
+                for( int m=0; m<sp->N_AA; m++ ) {
+                    for( int n=0; n<4; n++ ) {
+                        LinkListUpdate(sp, Chn, m, n);
+                    }
+                }
+                if(j==199 && k==199 ) {
+                    std::cerr << "no legal angle found for i=" << i;
+                    std::cerr << std::endl;
+                }
+            }
+            if(legal_conf_found) {
+                break;
+            }
+        }
+    }
 
 
     Eold = E_check(sp, hd, Chn);
+    
+    outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
 
     // move overlapping/new chains to legalize/randomize initial configuration. no energy-dependent acception criterion. all legal moves are accepted
@@ -512,7 +594,7 @@ int main(int argc, char *argv[])
                 case 1:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*(sp->N_CH*sp->N_AA));  // amino acid identifier of the rotation origin
                     jp = trunc(((double)RND()/((double)my_rng.max()+1))*4);                    // angle (jp==0;1 Phi   jp==2;3 Psi) & lower (jp== 0;2) or higher (jp==1;3)
-                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE);
+                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE, 0, 0);
                     break;
                 case 2:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
@@ -708,7 +790,7 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
-                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE);
+                    accept = Pivot(sp, hd, Chn, ip, jp/2, jp%2, deltaE, 0, 0);
                     break;
                 case 2:
                     ip = trunc(((double)RND()/((double)my_rng.max()+1))*sp->N_CH);
@@ -2930,10 +3012,10 @@ bool wiggle(SysPara *sp, Header *hd, Chain Chn[], int h, int i, int j, double &d
     return true;
 }
 // rotation around pivot angels Phi (N-Ca) or Psi (Ca-C)
-bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE)
+bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part, double &deltaE, int set_angle, double angle)
 {
     Bead Bdcpy[4*sypa->N_AA*sypa->N_CH];                                // copy of rotated beads
-    double angle, cos_a, sin_a, nsqrt;                      // variables for rotation matrix
+    double cos_a, sin_a, nsqrt;                      // variables for rotation matrix
     double Eold, dEhb, distabs;                             // assisting energy values for dE calculation
     double rotMtrx[3][3];                                   // rotation matrix
     double n[3], dVec[3], newpos[3], com[3], shift[3];
@@ -2957,7 +3039,9 @@ bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part,
         }
     }
 
-    angle = sypa->DPIV_MAX*(1.0 - 2.0*((double)RND()/(double)my_rng.max()));
+    if( set_angle == 0 ) {
+        angle = sypa->DPIV_MAX*(1.0 - 2.0*((double)RND()/(double)my_rng.max()));
+    }
     cos_a = cos(angle); sin_a = sin(angle);
     if(pivan == 0) {
         std::tie(n[0], n[1], n[2]) = distVecBC(sypa, Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[0], Chn[res/sypa->N_AA].AmAc[res%sypa->N_AA].Bd[1]);  nsqrt = absVec(n);
@@ -2990,17 +3074,21 @@ bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part,
             Chn[i/sypa->N_AA].AmAc[i%sypa->N_AA].Bd[j].setR(newpos[0], newpos[1], newpos[2]);
             
             // overlapp check
-            if( EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, sp, 0, false) == -1 || EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ep, sypa->N_CH*sypa->N_AA, 0, false) == -1 ) {
-                for( int k=sp; k<i+1; k++ ) {
-                    for( int m=0; m<4; m++ ) {
-                        Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+            if( set_angle == 0 ) {
+                if( EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, 0, sp, 0, false) == -1 || EO_SegBead(sypa, hd, Chn, i/sypa->N_AA, i%sypa->N_AA, j, ep, sypa->N_CH*sypa->N_AA, 0, false) == -1 ) {
+                    for( int k=sp; k<i+1; k++ ) {
+                        for( int m=0; m<4; m++ ) {
+                            Chn[k/sypa->N_AA].AmAc[k%sypa->N_AA].Bd[m] = Bdcpy[k*4+m];        // reset chain & exit
+                        }
                     }
+                    return false;
                 }
-                return false;
             }
         }
     }
     
+
+    if(set_angle=0) {
     // energy calculation
     // break old HB
     nBHB = -1;
@@ -3106,6 +3194,8 @@ bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part,
     }
     // SC interactions
     deltaE = EO_SegSeg(sypa, hd, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, hd, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
+
+    }
 
     return true;
 }

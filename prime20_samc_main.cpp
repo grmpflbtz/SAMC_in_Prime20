@@ -1103,7 +1103,7 @@ int main(int argc, char *argv[])
                 calc_gyration_radius(sp, ot, Chn, eBin_o);
                 
                 for( int i=0; i<sp->N_CH; i++ ) {
-                    if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-10) {
+                    if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-5) {
                         std::cout << std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
                         hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
                     }

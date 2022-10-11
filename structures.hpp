@@ -31,6 +31,9 @@ struct SysPara {
     double LBOX;            // has to be larger than the biggest interaction radius (SW_HUGE = 7.4)
     int neighUpdate;        // update step for neighbor list
     int t_NLUpdate;         // steps passed since last neighbor list update
+
+    // debug tests
+    int DebugTest;          // toggle test for energy and bondlength at every step
     int NeighListTest;      // tests integrity of LinkList and NeighHead every step [on/off]
     int BondLengthTest;     // check bond length in whole chain at T_WRITE [on/off]
 

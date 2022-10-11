@@ -281,7 +281,8 @@ int main(int argc, char *argv[])
     sp->stepit = 4*sp->N_AA*sp->N_CH;
     sp->neighUpdate = (sp->LBOX-SW_HUGE)/sp->DISP_MAX;
     sp->NeighListTest = 0;
-    sp->BondLengthTest = 1;
+    sp->BondLengthTest = 0;
+    sp->DebugTest = 0;
     for( int i=0; i<4; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
@@ -459,75 +460,79 @@ int main(int argc, char *argv[])
     bool legal_conf_found;
     bool aa_overlap;
     int pm_angle_1, pm_angle_2;
-    for( int i=1; i<sp->N_AA; i++ ) {
 
-        outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
+    if(ini_overlap) {
 
+        for( int i=1; i<sp->N_AA; i++ ) {
 
-        for( int j=0; j<200; j++ ) {
-            if( j%2==0) { pm_angle_1 = 1; }
-            else{ pm_angle_1 = -1; }
-            for( int k=0; k<200; k++ ) {
-                if( k%2==0) { pm_angle_2 = 1; }
-                else{ pm_angle_2 = -1; }
-                Psi_angle = pm_angle_1*(j/2)*2*M_PI/200.0;
-                Phi_angle = pm_angle_2*(k/2)*2*M_PI/200.0;
-                deltaE = 0.0;
-                legal_conf_found = false;
+            outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
 
-                //if(i==40) { Phi_angle = -M_PI/3.0; }
+            for( int j=0; j<200; j++ ) {
+                if( j%2==0) { pm_angle_1 = 1; }
+                else{ pm_angle_1 = -1; }
+                for( int k=0; k<200; k++ ) {
+                    if( k%2==0) { pm_angle_2 = 1; }
+                    else{ pm_angle_2 = -1; }
+                    Psi_angle = pm_angle_1*(j/2)*2*M_PI/200.0;
+                    Phi_angle = pm_angle_2*(k/2)*2*M_PI/200.0;
+                    deltaE = 0.0;
+                    legal_conf_found = false;
 
 
-                // copy of chain in case of revert
-                for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                    for( int n=0; n<4; n++ ) {
-                        BdCpy[m*4+n] = Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n];
+                    //if(i==40) { Phi_angle = -M_PI/3.0; }
+
+
+                    // copy of chain in case of revert
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        for( int n=0; n<4; n++ ) {
+                            BdCpy[m*4+n] = Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n];
+                        }
                     }
-                }
 
-                // pivot rotation
-                Pivot(sp, hd, Chn, i, 0, 0, deltaE, 1, Phi_angle );
-                Pivot(sp, hd, Chn, i, 1, 0, deltaE, 1, Psi_angle );
+                    // pivot rotation
+                    Pivot(sp, hd, Chn, i, 0, 0, deltaE, 1, Phi_angle );
+                    Pivot(sp, hd, Chn, i, 1, 0, deltaE, 1, Psi_angle );
 
-                for( int m=0; m<sp->N_AA; m++ ) {
-                    for( int n=0; n<4; n++ ) {
-                        LinkListUpdate(sp, Chn, m, n);
+                    for( int m=0; m<sp->N_AA; m++ ) {
+                        for( int n=0; n<4; n++ ) {
+                            LinkListUpdate(sp, Chn, m, n);
+                        }
                     }
-                }
-                
-                // check overlap to previously rotated chain segment
-                aa_overlap = false;
-                for (int n = 0; n < 4; n++){
-                    if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i, n, 0, i, 0, false) == -1 ) {
-                        aa_overlap = true;
+                    
+                    // check overlap to previously rotated chain segment
+                    aa_overlap = false;
+                    for (int n = 0; n < 4; n++){
+                        if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i, n, 0, i, 0, false) == -1 ) {
+                            aa_overlap = true;
+                        }
                     }
-                }
-                if(!aa_overlap) {
-                    legal_conf_found = true;
+                    if(!aa_overlap) {
+                        legal_conf_found = true;
+                    }
+                    if(legal_conf_found) {
+                        break;
+                    }
+                    // REVERT
+                    // copy of chain in case of revert
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+                        for( int n=0; n<4; n++ ) {
+                            Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n] = BdCpy[m*4+n];
+                        }
+                    }
+                    for( int m=0; m<sp->N_AA; m++ ) {
+                        for( int n=0; n<4; n++ ) {
+                            LinkListUpdate(sp, Chn, m, n);
+                        }
+                    }
+                    if(j==199 && k==199 ) {
+                        std::cerr << "no legal angle found for i=" << i;
+                        std::cerr << std::endl;
+                    }
                 }
                 if(legal_conf_found) {
                     break;
                 }
-                // REVERT
-                // copy of chain in case of revert
-                for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
-                    for( int n=0; n<4; n++ ) {
-                        Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n] = BdCpy[m*4+n];
-                    }
-                }
-                for( int m=0; m<sp->N_AA; m++ ) {
-                    for( int n=0; n<4; n++ ) {
-                        LinkListUpdate(sp, Chn, m, n);
-                    }
-                }
-                if(j==199 && k==199 ) {
-                    std::cerr << "no legal angle found for i=" << i;
-                    std::cerr << std::endl;
-                }
-            }
-            if(legal_conf_found) {
-                break;
             }
         }
     }
@@ -733,19 +738,17 @@ int main(int argc, char *argv[])
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
 
-            /*
-            E_error(sp, hd, Chn, Timer, Eold, step);
-            if(!checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA)) {
-                std::cout << "AAAAA" << std::endl;
-            }*/
 
             // print estimated remaining time
-            if( sp->cluster_opt==0 && step%((int)1e3) == 0 ) {
+            if( sp->cluster_opt==0 && step%((int)1e3) == 0 && it==0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
             }
 
             if(sp->NeighListTest==1) {
                 CheckLinkListIntegrity(sp, Chn);
+            }
+            if(sp->BondLengthTest==1) {
+                checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA); 
             }
             // select move type
             moveselec = trunc( ( (double)RND()/( (double)my_rng.max()+1 ) )*(sp->WT_WIGGLE + sp->WT_PIVOT + sp->WT_TRANS + sp->WT_ROT));
@@ -1084,6 +1087,15 @@ int main(int argc, char *argv[])
 
             gammasum += gamma;
 
+
+            if(sp->DebugTest==1) {
+                checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA);
+                if(!E_error(sp, hd, Chn, Timer, Eold, step+1)) {
+                    outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
+                    //std::cout << "Woopsiedaisy…\n" << std::flush;
+                    //std::cout << std::endl;
+                }
+            }
         }   // end of one MC step
 
         //gamma update
@@ -1127,12 +1139,8 @@ int main(int argc, char *argv[])
         if( (step+1)%sp->T_WRITE == 0 ) {
             // system check
             E_error(sp, hd, Chn, Timer, Eold, step+1);
-            if(sp->BondLengthTest) {
-                checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA); 
-            }
-            if(sp->NeighListTest) {
-                CheckLinkListIntegrity(sp, Chn);
-            }
+            checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA); 
+            CheckLinkListIntegrity(sp, Chn);
 
             // output files
             if(!sp->FIX_lngE) {
@@ -2008,7 +2016,7 @@ bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int 
         Checkpos.open(fnm, ios::app);
     }
     if( Checkpos.is_open() ) {
-        Checkpos << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s) with seq. " << sp->AA_seq << " at E=" << ener << std::endl;
+        Checkpos << "# Config of " << sp->N_CH << " " << sp->N_AA << "-mer(s)\n# Seq. " << sp->AA_seq << "\n# E=" << ener << "\n# L=" << sp->L <<  std::endl;
         Checkpos << sp->N_CH*sp->N_AA*4 << std::endl;
         Checkpos << setprecision(15) << std::fixed;
         for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
@@ -2532,7 +2540,7 @@ double E_single(Chain Chn[], int h1, int i1, int h2, int i2, double d_sq)
     }
     return 0;
 }
-// SC interaction energy of one SC Bead (j1 must be 3). Or overlapp check for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
+// SC interaction energy (EOswitch==1) of one SC Bead (j1 must be 3). Or overlapp check (EOswitch==0) for any AmAc[i1].Bd[j1]. Versus chain segment [sp, ep).
 double EO_SegBead(SysPara *sypa, Header *hd, Chain Chn[], int h1, int i1, int j1, int sp, int ep, int EOswitch, bool findalloverlap)
 {
     int neighBox[3], centrBox[3];
@@ -2609,7 +2617,7 @@ double EO_SegSeg(SysPara *sp, Header *hd, Chain Chn[], int sp1, int ep1, int sp2
         for( int j=0; j<4; j++ ) {
             if( EOswitch == 1 && j != 3) continue;  // skip energy calculation for non-SC beads
             dEnergy = EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, sp2, ep2, EOswitch, false);
-            if( dEnergy == -1 ) return -1;          // exit if overlapp check fails
+            if( EOswitch == 0 && dEnergy == -1 ) return -1;          // exit if overlapp check fails
             energy += dEnergy;
         }
     }
@@ -3088,112 +3096,114 @@ bool Pivot(SysPara *sypa, Header *hd, Chain Chn[], int res, int pivan, int part,
     }
     
 
-    if(set_angle=0) {
-    // energy calculation
-    // break old HB
-    nBHB = -1;
-    dEhb = 0.0;
-    
-    //spHB = (high == 0) ? sp : (sp+1);
-    //epHB = (high == 0) ? (ep+1) : ep;
+    if(set_angle==0) {
 
-    spHB1 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res;
-    spHB2 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res+1;
-    epHB1 = (part == 0) ? res+1 : (res/sypa->N_AA +1)*sypa->N_AA;
-    epHB2 = (part == 0) ? res : (res/sypa->N_AA +1)*sypa->N_AA;
 
-    for( int i=spHB1; i<epHB1; i++ ) {
-    //for( int i=sp; i<epHB; i++ ) {
-        if( (HBList[i][0] < spHB2 || HBList[i][0] >= epHB2) && HBList[i][0] > -1 ) {
-            BrokenHB[++nBHB][0] = i;
-            BrokenHB[nBHB][1] = HBList[i][0];
-            HBList[HBList[i][0]][1] = -1;
-            HBList[i][0] = -1;
-            dEhb += 1.0;
-        }
-        if( (HBList[i][1] < spHB2 || HBList[i][1] >= epHB2) && HBList[i][1] > -1 ) {
-            BrokenHB[++nBHB][1] = i;
-            BrokenHB[nBHB][0] = HBList[i][1];
-            HBList[HBList[i][1]][0] = -1;
-            HBList[i][1] = -1;
-            dEhb += 1.0;
-        }
-    }
-    // two cases not fully covered by the loop above: HBList[i1][0] and HBList[i1-1][1] with all possible partners
-    if(pivan==0) {
-        if( HBList[res][0] > -1 ) {
-            BrokenHB[++nBHB][0] = res;
-            BrokenHB[nBHB][1] = HBList[res][0];
-            HBList[HBList[res][0]][1] = -1;
-            HBList[res][0] = -1;
-            dEhb += 1.0;
-        }
-        if( res%sypa->N_AA != 0 ) {
-            if( HBList[res-1][1] > -1) {
-                BrokenHB[++nBHB][1] = res-1;
-                BrokenHB[nBHB][0] = HBList[res-1][1];
-                HBList[HBList[res-1][1]][0] = -1;
-                HBList[res-1][1] = -1;
+        // energy calculation
+        // break old HB
+        nBHB = -1;
+        dEhb = 0.0;
+
+        //spHB = (high == 0) ? sp : (sp+1);
+        //epHB = (high == 0) ? (ep+1) : ep;
+
+        spHB1 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res;
+        spHB2 = (part == 0) ? (res/sypa->N_AA)*sypa->N_AA : res+1;
+        epHB1 = (part == 0) ? res+1 : (res/sypa->N_AA +1)*sypa->N_AA;
+        epHB2 = (part == 0) ? res : (res/sypa->N_AA +1)*sypa->N_AA;
+
+        for( int i=spHB1; i<epHB1; i++ ) {
+        //for( int i=sp; i<epHB; i++ ) {
+            if( (HBList[i][0] < spHB2 || HBList[i][0] >= epHB2) && HBList[i][0] > -1 ) {
+                BrokenHB[++nBHB][0] = i;
+                BrokenHB[nBHB][1] = HBList[i][0];
+                HBList[HBList[i][0]][1] = -1;
+                HBList[i][0] = -1;
+                dEhb += 1.0;
+            }
+            if( (HBList[i][1] < spHB2 || HBList[i][1] >= epHB2) && HBList[i][1] > -1 ) {
+                BrokenHB[++nBHB][1] = i;
+                BrokenHB[nBHB][0] = HBList[i][1];
+                HBList[HBList[i][1]][0] = -1;
+                HBList[i][1] = -1;
                 dEhb += 1.0;
             }
         }
-    } else {
-        if( HBList[res][1] > -1 ) {
-            BrokenHB[++nBHB][1] = res;
-            BrokenHB[nBHB][0] = HBList[res][1];
-            HBList[HBList[res][1]][0] = -1;
-            HBList[res][1] = -1;
-            dEhb += 1.0;
-        }
-        if( (res+1)%sypa->N_AA != 0 ) {
-            if( HBList[res+1][0] > -1 ) {
-                BrokenHB[++nBHB][0] = res+1;
-                BrokenHB[nBHB][1] = HBList[res+1][0];
-                HBList[HBList[res+1][0]][1] = -1;
-                HBList[res+1][0] = -1;
+        // two cases not fully covered by the loop above: HBList[i1][0] and HBList[i1-1][1] with all possible partners
+        if(pivan==0) {
+            if( HBList[res][0] > -1 ) {
+                BrokenHB[++nBHB][0] = res;
+                BrokenHB[nBHB][1] = HBList[res][0];
+                HBList[HBList[res][0]][1] = -1;
+                HBList[res][0] = -1;
                 dEhb += 1.0;
             }
+            if( res%sypa->N_AA != 0 ) {
+                if( HBList[res-1][1] > -1) {
+                    BrokenHB[++nBHB][1] = res-1;
+                    BrokenHB[nBHB][0] = HBList[res-1][1];
+                    HBList[HBList[res-1][1]][0] = -1;
+                    HBList[res-1][1] = -1;
+                    dEhb += 1.0;
+                }
+            }
+        } else {
+            if( HBList[res][1] > -1 ) {
+                BrokenHB[++nBHB][1] = res;
+                BrokenHB[nBHB][0] = HBList[res][1];
+                HBList[HBList[res][1]][0] = -1;
+                HBList[res][1] = -1;
+                dEhb += 1.0;
+            }
+            if( (res+1)%sypa->N_AA != 0 ) {
+                if( HBList[res+1][0] > -1 ) {
+                    BrokenHB[++nBHB][0] = res+1;
+                    BrokenHB[nBHB][1] = HBList[res+1][0];
+                    HBList[HBList[res+1][0]][1] = -1;
+                    HBList[res+1][0] = -1;
+                    dEhb += 1.0;
+                }
+            }
         }
-    }
 
-    // close new HB
-    for( int m=spHB1; m<epHB1; m++ ) {
-        for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
-            if( n >= spHB2 && n < epHB2 ) continue;
-            if( (m/sypa->N_AA != n/sypa->N_AA) || (( m/sypa->N_AA == n/sypa->N_AA) && (abs(m-n) > 3)) ) {
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[0], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[2]);
-                distabs = dotPro(dVec, dVec);
-                if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
-                else                        { NCDist[m][n] = -1; }
-                std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[2], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[0]);
-                distabs = dotPro(dVec, dVec);
-                if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
-                else                        { NCDist[n][m] = -1; }
-            }
-            else {
-                NCDist[m][n] = -1;
-                NCDist[n][m] = -1;
-            }
-            if(HBcheck(sypa, Chn, m, n)) dEhb -= 1.0;
-            if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
-        }
-    }
-    // two special cases (HBList[i1][0] and HBList[i1-1][1]) from above are covered in loop below
-    if( nBHB >= 0 ) {       // previously broken HB can rebond
-        for( int i=0; i<nBHB+1; i++ ) {
-            for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
-                if(HBcheck(sypa, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
-                if(HBcheck(sypa, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+        // close new HB
+        for( int m=spHB1; m<epHB1; m++ ) {
+            for( int n=0; n<sypa->N_CH*sypa->N_AA; n++ ) {
+                if( n >= spHB2 && n < epHB2 ) continue;
+                if( (m/sypa->N_AA != n/sypa->N_AA) || (( m/sypa->N_AA == n/sypa->N_AA) && (abs(m-n) > 3)) ) {
+                    std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[0], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[2]);
+                    distabs = dotPro(dVec, dVec);
+                    if( distabs < SW2HUGE )     { NCDist[m][n] = distabs; }
+                    else                        { NCDist[m][n] = -1; }
+                    std::tie(dVec[0], dVec[1], dVec[2]) = distVecBC(sypa, Chn[m/sypa->N_AA].AmAc[m%sypa->N_AA].Bd[2], Chn[n/sypa->N_AA].AmAc[n%sypa->N_AA].Bd[0]);
+                    distabs = dotPro(dVec, dVec);
+                    if( distabs < SW2HUGE )     { NCDist[n][m] = distabs; }
+                    else                        { NCDist[n][m] = -1; }
+                }
+                else {
+                    NCDist[m][n] = -1;
+                    NCDist[n][m] = -1;
+                }
+                if(HBcheck(sypa, Chn, m, n)) dEhb -= 1.0;
+                if(HBcheck(sypa, Chn, n, m)) dEhb -= 1.0;
             }
         }
-    }
-    for( int i=sp; i<ep; i++ ) {
-        for( int j=0; j<4; j++ ) {
-            LinkListUpdate(sypa, Chn, i, j);
+        // two special cases (HBList[i1][0] and HBList[i1-1][1]) from above are covered in loop below
+        if( nBHB >= 0 ) {       // previously broken HB can rebond
+            for( int i=0; i<nBHB+1; i++ ) {
+                for( int j=0; j<sypa->N_CH*sypa->N_AA; j++ ) {
+                    if(HBcheck(sypa, Chn, BrokenHB[i][0], j)) dEhb -= 1.0;
+                    if(HBcheck(sypa, Chn, j, BrokenHB[i][1])) dEhb -= 1.0;
+                }
+            }
         }
-    }
-    // SC interactions
-    deltaE = EO_SegSeg(sypa, hd, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, hd, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
+        for( int i=sp; i<ep; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                LinkListUpdate(sypa, Chn, i, j);
+            }
+        }
+        // SC interactions
+        deltaE = EO_SegSeg(sypa, hd, Chn, sp, ep, 0, sp, 1) + EO_SegSeg(sypa, hd, Chn, sp, ep, ep, sypa->N_CH*sypa->N_AA, 1) + dEhb - Eold;
 
     }
 

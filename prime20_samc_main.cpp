@@ -1,53 +1,19 @@
 /* FILE: prime20_samc_main.cpp
  * 
- *                          X         X     XXXX     XXXX  XX     XX
- *                          XX       XX    XX  XX     XX   XXX    XX
- *                          XXX     XXX   XX    XX    XX   XXXX   XX
- *                          XXXX   XXXX  XXX    XXX   XX   XX XX  XX
- *                          XX XX XX XX  XXXXXXXXXX   XX   XX  XX XX
- *                          XX  XXX  XX  XXX    XXX   XX   XX   XXXX
- *                          XX   X   XX  XX      XX   XX   XX    XXX
- *                          XX       XX  XX      XX  XXXX  XX     XX
+ *               X         X     XXXX     XXXX  XX     XX
+ *               XX       XX    XX  XX     XX   XXX    XX
+ *               XXX     XXX   XX    XX    XX   XXXX   XX
+ *               XXXX   XXXX  XXX    XXX   XX   XX XX  XX
+ *               XX XX XX XX  XXXXXXXXXX   XX   XX  XX XX
+ *               XX  XXX  XX  XXX    XXX   XX   XX   XXXX
+ *               XX   X   XX  XX      XX   XX   XX    XXX
+ *               XX       XX  XX      XX  XXXX  XX     XX
  * 
- *              :'''''''''''''''''''''''''''''''''''''''''''''''''''''''''':
- *              : SAMC simulation for A-beta peptides in the Prime20 model :
- *              :,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,:
- */
-/* changelog:
- * 2019-02-08   Start. initialize bead & Amino acid class.
- * 2019-02-22   newChain function set up. trying to construct first amino acid - method via angles or distances?
- * 2019-03-01   first amino acid constructed - geometric solution - positions correct
- * 2019-03-08   whole chain created (flat). angles and distances correct (test program "config_check.cpp")
- * 2019-03-22   EnOv_bead() finished and integrated into wiggle() - extensive tests missing
- * 2019-03-28   abandon hierarchical energy calculation -> change to neighbour lists, which should be more efficient for multiple chains (legacy version 20190328)
- * 2019-04-03   new neighbourlist concept -> linked lists (legacy version 20190403)
- * 2019-05-09   HBcheck created and implemented in wiggle. still needs checking in running simulation.
- * 2019-05-13   wiggle implemented in newChain. including HBList and HBDist updates.
- * 2019-05-16   periodic boundary condition and shortest distance calculation implemented in wiggle() and distVecBC()
- *              split parts in newChain(): only creation now. Movement to randomize starting configuration is now in main() (legacy version in 20190516)
- * 2019-05-29   EO_SegBead() is new function, for energy calculation and overlapp check. One can specify the segment the bead is checked against in the parameters (legacy version in 20190523)
- * 2019-06-06   start to implement tracker of applied periodic boundary conditions in order to restore real coordinates for rotation moves (legacy version in 20190606)
- * 2019-06-19   added rotPsi() -> all move functions are constructed 
- * 2019-06-26   tweaked EO_SegSeg() to count 2x energy, when moving along one segment to account for energy contribution in other segment
- * 2019-07-30   in wiggle(): start switch(j) cascade for re-considering brokenHB for new HB
- * 2019-08-07   noticed that in HB_check() the periodic boundary conditions were not considered → use distVecBC() instead of manual distance calculations (legacy version in 20190807)
- *              implementation of HB at chain ends → rotation of NCa in NCaC plane by angle 2.668
- * 2019-08-15   introduced "class Chain" to enable multiple chains in system (legacy version 20190815)
- * 2019-10-15   two chains working in system. All HB problems seem to be solved (further, more extensive test necessary).
- *              Write-function for backup files implemented.
- * 2019-10-25   read functions for coordinate input and lngE input implemented
- * 2019-11-11   added extra_lng() function: enables independent lngE[] preset from input file
- * 2019-12-17   backup in archive | change move selection to real_dist with trunc() | 
- * 2020-01-10   corrected EBin selection to not include energies < EMin
- * 2020-02-03   readCoord() function read BC coordinates → now: reads real coords (R script transforms backup_coord_output)
- *              tranlsation move implementation startet (legacy version 20200203) - done
- * 2020-02-05   transition to SWBB = 4.5 and 
- *              squeeze parameters. New chain creation function necessary (legacy version 20200205)
- * 2020-02-14   introduce production (approximate lng) and measure run (fixed lng - measure geometric observables). (legacy version 20200214)
- * 2020-08-04   changed nstep to number of beads in system
- * 
- * MOVED TO GITHUB DOCUMENTATION
- * 
+ *     :'''''''''''''''''''''''''''''''''''''''''''''''''''''''''':
+ *     : SAMC simulation for A-beta peptides in the Prime20 model :
+ *     :,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,:
+ *
+ *                 Christian Lauer - started 2019-02-08
  */
 /* abbreviations:
  * SC   - side chain

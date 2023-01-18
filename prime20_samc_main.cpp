@@ -124,8 +124,11 @@ int assignBox(SysPara *sp, Bead Bd);                                            
 int LinkListInsert(SysPara *sp, Chain Chn[], int i1, int j1);                           // insert particle AmAc[i1].Bd[j1] into Linked List
 int LinkListUpdate(SysPara *sp, Chain Chn[], int i1, int j1);                           // update Linked List position of AmAc[i1].Bd[j1]
 int CheckLinkListIntegrity(SysPara *sp, Chain Chn[]);
-
+// memory allocation functions
 int output_memory_deallocation(SysPara *sp, Output *ot);                                // deallocating momory of Output
+// other functions
+bool searchValueInArray(int value, int array[], int size);                              // search for value in array
+bool checkBeadCoordinates(SysPara *sp, Chain Chn[], double threshold);                  // check whether Bead coordinates are above certain threshold
 
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  >>   MAIN FUNCTION   <<  XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -155,6 +158,11 @@ int main(int argc, char *argv[])
     int eBin_n, eBin_o;                                     // energy bin of new and old energy value
     double gamma, gammasum;                                 // gamma value and sum over gamma(t)
     double m_total;                                         // total mass of the system
+
+    // Debug parameters
+    sp->NeighListTest = 0;  // Neighlist Test before move
+    sp->BondLengthTest = 0; // BondLength Test before move
+    sp->DebugTest = 0;      // Energy, NeighList, BondLength tests are performed if DebugTest = 1
 
     if(CommandInitialize(argc, argv, sp, hd) == -1) {
         delete sp; delete hd; delete ot;
@@ -246,9 +254,6 @@ int main(int argc, char *argv[])
     sp->BinW = (sp->EMax - sp->EMin)/(double)sp->NBin;
     sp->stepit = 4*sp->N_AA*sp->N_CH;
     sp->neighUpdate = (sp->LBOX-SW_HUGE)/sp->DISP_MAX;
-    sp->NeighListTest = 0;
-    sp->BondLengthTest = 0;
-    sp->DebugTest = 0;
     for( int i=0; i<4; i++ ) {
         ot->nattempt[i] = 0;
         ot->naccept[i] = 0;
@@ -429,7 +434,7 @@ int main(int argc, char *argv[])
 
     if(ini_overlap) {
 
-        for( int i=1; i<sp->N_AA; i++ ) {
+        for( int i=0; i<sp->N_AA; i++ ) {
 
             outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
@@ -446,7 +451,7 @@ int main(int argc, char *argv[])
                     legal_conf_found = false;
 
 
-                    //if(i==40) { Phi_angle = -M_PI/3.0; }
+                    //if(i==68) { Psi_angle = +M_PI/3.0; }
 
 
                     // copy of chain in case of revert
@@ -703,6 +708,23 @@ int main(int argc, char *argv[])
     for( step=tcont; step<sp->T_MAX; step++ ) {
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
+
+
+
+            // debuggin
+            /*
+            int possible_it[] = {16,17, 65,66, 182,183, 220,221, 297,298, 450,451, 461,462};
+            if( step == 0 && searchValueInArray(it, possible_it, sizeof(possible_it)) ) {
+                outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
+            }
+            if (checkBeadCoordinates(sp, Chn, 1e6)) {
+                std::cerr << "ERROR: bead coordinates are not finite" << std::endl;
+                outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
+                this_thread::sleep_for(chrono::milliseconds(200));
+                return 0;
+            }*/
+
+
 
 
             // print estimated remaining time
@@ -1056,10 +1078,10 @@ int main(int argc, char *argv[])
 
             if(sp->DebugTest==1) {
                 checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA);
-                if(!E_error(sp, hd, Chn, Timer, Eold, step+1)) {
+                if(!E_error(sp, hd, Chn, Timer, Eold, step)) {
                     outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-                    //std::cout << "Woopsiedaisy…\n" << std::flush;
-                    //std::cout << std::endl;
+                    std::cout << "Woopsiedaisy…\n" << std::flush;
+                    std::cout << std::endl;
                 }
             }
         }   // end of one MC step
@@ -1083,7 +1105,7 @@ int main(int argc, char *argv[])
                 for( int i=0; i<sp->N_CH; i++ ) {
                     if( ot->rGyrCur[i] - (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) > 1e-5) {
                         std::cout << std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
-                        hd->os_log << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
+                        hd->os_log<< std::fixed << std::setprecision(5) << std::endl << "--- ERROR ---\tgyration radius does not match eigenvalues. Chn[" << i << "]" << std::endl << "             \trGyr=" << ot->rGyrCur[i] << "  tGyrX²+tGyrY²+tGyrZ²=" << (ot->tGyrEigCur[i][0]+ot->tGyrEigCur[i][1]+ot->tGyrEigCur[i][2]) << std::endl;
                     }
                 }
             }
@@ -3921,4 +3943,32 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
             delete[] ot->dihePsi;
 
     return 0;
+}
+
+// search value in array return boolean <3
+bool searchValueInArray(int value, int array[], int size)
+{
+    for(int i=0; i<size; i++) {
+        if(array[i] == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// check whether Bead coordinates are above certain threshold
+bool checkBeadCoordinates(SysPara *sp, Chain Chn[], double threshold)
+{
+    for(int i=0; i<sp->N_CH; i++) {
+        for(int j=0; j<sp->N_AA; j++) {
+            for(int k=0; k<4; k++) {
+                for(int l=0; l<3; l++) {
+                    if(abs(Chn[i].AmAc[j].Bd[k].getR(l)) > threshold) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
 }

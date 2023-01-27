@@ -8,6 +8,7 @@ Timer::Timer(){
 void Timer::PrintProgress( long curstep, long total ) {
     if(curstep == 0) { start_time = time(NULL); 
     curstep++; }
+    int length_of_total = std::to_string(total).length();
     double done = (double)(curstep)/(double)total;
     if(curstep == 1) { curstep--; }
     time_t curtime = time(NULL);
@@ -19,7 +20,7 @@ void Timer::PrintProgress( long curstep, long total ) {
     long min = sec/60;
     sec = sec%60;
 
-    std::cout << "\rstep " << std::fixed << std::setw(10) << curstep << "/" << total << " (" << std::setw(4) << std::right << std::setprecision(2) << done*100 << "%) | Remaining time: " << convertSecToString(remain) << std::flush;
+    std::cout << "\rstep " << std::fixed << std::setfill(' ') << std::setw(length_of_total) << curstep << "/" << total << " (" << std::setw(4) << std::right << std::setprecision(2) << done*100 << "%) | Remaining time: " << convertSecToString(remain) << std::flush;
 }
 
 void Timer::endProgram() {

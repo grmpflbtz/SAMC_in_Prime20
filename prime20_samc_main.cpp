@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
     std::ostringstream oss;
     string filename;
     double Eold, Enew, Egrd, deltaE;                        // energy values
-    double dist[3];                                         // distance vector
+    double dist[3], new_pos[3];                             // distance vector, new y-position when new chain is constructed
     double distabs;                                         // absolute distance
     bool accept, newchn, ini_overlap;                       // acceptance value of move in SAMC; construction of new chain; overlapp in inital configuration
     bool rlngE;                                             // was lng(E) file read
@@ -361,15 +361,23 @@ int main(int argc, char *argv[])
             for( int m=0; m<i+1; m++) {
                 for( int j=0; j<sp->N_AA; j++ ) {
                     for( int k=0; k<4; k++ ) {
-                        dist[2] = Chn[m].AmAc[j].Bd[k].getR(2) + (sp->L)/((double)sp->N_CH);
-                        Chn[m].AmAc[j].Bd[k].setBC( 2, Chn[m].AmAc[j].Bd[k].getBC(2) + floor(dist[2]/sp->L) );
-                        dist[2] = dist[2] - sp->L*floor(dist[2]/sp->L);
-                        Chn[m].AmAc[j].Bd[k].setR( Chn[m].AmAc[j].Bd[k].getR(0), Chn[m].AmAc[j].Bd[k].getR(1), dist[2] );
+                        new_pos[2] = Chn[m].AmAc[j].Bd[k].getR(2) + (sp->L)/((double)sp->N_CH);
+                        Chn[m].AmAc[j].Bd[k].setBC( 2, Chn[m].AmAc[j].Bd[k].getBC(2) + floor(new_pos[2]/sp->L) );
+                        new_pos[2] = new_pos[2] - sp->L*floor(new_pos[2]/sp->L);
+                        Chn[m].AmAc[j].Bd[k].setR( Chn[m].AmAc[j].Bd[k].getR(0), Chn[m].AmAc[j].Bd[k].getR(1), new_pos[2] );
                         LinkListUpdate(sp, Chn, (m*sp->N_AA)+j, k);
                     }
                 }
             }
         }
+
+        // update neighbor list after moving chains
+        for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
+            for( int n=0; n<4; n++ ) {
+                LinkListUpdate(sp, Chn, m, n);
+            }
+        }
+
         // setup DiaSQValues Matrix
         DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
         newchn = true;
@@ -420,12 +428,13 @@ int main(int argc, char *argv[])
         hd->os_log<< "--- ERROR ---\tBad bond length in starting configuration" << std::endl; hd->os_log.close();
         std::cerr << "--- ERROR ---\tBad bond length in starting configuration" << std::endl; return 0;
     }
+    // check link list integrity
+    CheckLinkListIntegrity(sp, Chn);
 
     // position check file output
     //outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
     // systematically rotate dihedral angles to get legal conformation
-
     double Phi_angle;
     double Psi_angle;
     bool legal_conf_found;
@@ -434,10 +443,9 @@ int main(int argc, char *argv[])
 
     if(ini_overlap) {
 
-        for( int i=0; i<sp->N_AA; i++ ) {
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
 
             outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
-
 
             for( int j=0; j<200; j++ ) {
                 if( j%2==0) { pm_angle_1 = 1; }
@@ -451,7 +459,7 @@ int main(int argc, char *argv[])
                     legal_conf_found = false;
 
 
-                    //if(i==68) { Psi_angle = +M_PI/3.0; }
+                    //if(i==68) { Psi_angle = +M_PI/3.0; }      // for debugging or manual rotation
 
 
                     // copy of chain in case of revert
@@ -464,17 +472,18 @@ int main(int argc, char *argv[])
                     // pivot rotation
                     Pivot(sp, hd, Chn, i, 0, 0, deltaE, 1, Phi_angle );
                     Pivot(sp, hd, Chn, i, 1, 0, deltaE, 1, Psi_angle );
-
-                    for( int m=0; m<sp->N_AA; m++ ) {
+                    /*
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
                         for( int n=0; n<4; n++ ) {
                             LinkListUpdate(sp, Chn, m, n);
                         }
                     }
-                    
+                    */
+                    CheckLinkListIntegrity(sp, Chn);
                     // check overlap to previously rotated chain segment
                     aa_overlap = false;
                     for (int n = 0; n < 4; n++){
-                        if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i, n, 0, i, 0, false) == -1 ) {
+                        if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, n, 0, i, 0, false) == -1 ) {
                             aa_overlap = true;
                         }
                     }
@@ -491,11 +500,12 @@ int main(int argc, char *argv[])
                             Chn[m/sp->N_AA].AmAc[m%sp->N_AA].Bd[n] = BdCpy[m*4+n];
                         }
                     }
-                    for( int m=0; m<sp->N_AA; m++ ) {
+                    for( int m=0; m<sp->N_CH*sp->N_AA; m++ ) {
                         for( int n=0; n<4; n++ ) {
                             LinkListUpdate(sp, Chn, m, n);
                         }
                     }
+                    CheckLinkListIntegrity(sp, Chn);
                     if(j==199 && k==199 ) {
                         std::cerr << "no legal angle found for i=" << i;
                         std::cerr << std::endl;
@@ -510,7 +520,16 @@ int main(int argc, char *argv[])
 
 
     Eold = E_check(sp, hd, Chn);
-    
+    // overlap check of whole chain
+    ini_overlap = false;
+    for( int i=0; i<sp->N_CH*sp->N_AA; i++) {
+        for( int j=0; j<4; j++) {
+            if( EO_SegBead(sp, hd, Chn, i/sp->N_AA, i%sp->N_AA, j, i, sp->N_CH*sp->N_AA, 0, true) == -1 ) {
+                ini_overlap = true;
+            }
+        }
+    }
+    CheckLinkListIntegrity(sp, Chn);
     outputPositions(sp, hd, hd->iniconf, Chn, 0, Eold);
 
 
@@ -523,7 +542,7 @@ int main(int argc, char *argv[])
         sp->t_NLUpdate = 0;
         while( true ) {
             // end pre-SAMC movement after tStart moves and within desired energy window
-            if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold < sp->EStart) ) {
+            if( (step >= sp->tStart) && (Eold >= sp->EMin) && (Eold <= sp->EStart) ) {
                 if(EO_SegSeg(sp, hd, Chn, 0, sp->N_CH*sp->N_AA, 0, sp->N_CH*sp->N_AA, 0) == 0 ) {
                     //if(ini_overlap) { std::cout << "         completed overlap removal" << std::endl; }
                     std::cout << "\rFinished pre-SAMC moves after " << step << " steps" << std::endl << std::flush;
@@ -634,16 +653,9 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-
-            // check bond length after every move - if this failes: abort run
-            /*
-            if( !checkBndLngth(sp, Chn, 0, sp->N_CH*sp->N_AA) ) {
-                hd->os_log<< std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl; hd->os_log.close();
-                std::cerr << std::endl << "bond length error: t=" << step << std::endl << "Energy = " << Eold << std::endl;
-                outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-                this_thread::sleep_for(chrono::milliseconds(200));
-                return 0;
-            }*/            
+            // check LinkList integrity
+            CheckLinkListIntegrity(sp, Chn);
+            // check energy after every move - if this failes: abort run
             if( abs(Eold-E_check(sp, hd, Chn)) > 0.01 ) {
                 double Ecur = E_check(sp, hd, Chn);
                 hd->os_log<< std::endl << "--- ERROR ---\tenergies are not equal: Eold=" << std::fixed << std::setprecision(3) << Eold << " Ecur=" << E_check(sp, hd, Chn) << std::endl; hd->os_log.close();
@@ -712,17 +724,22 @@ int main(int argc, char *argv[])
 
 
             // debuggin
+            // check if coordinate exceed 1e9
             /*
-            int possible_it[] = {16,17, 65,66, 182,183, 220,221, 297,298, 450,451, 461,462};
-            if( step == 0 && searchValueInArray(it, possible_it, sizeof(possible_it)) ) {
+            if( checkBeadCoordinates(sp, Chn, 1e5) ) {
                 outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-            }
-            if (checkBeadCoordinates(sp, Chn, 1e6)) {
                 std::cerr << "ERROR: bead coordinates are not finite" << std::endl;
+                //this_thread::sleep_for(chrono::milliseconds(200));
+                //return 0;
+            }
+            /*
+            int possible_it[] = {193, 194};
+            if( step == 5 && searchValueInArray(it, possible_it, sizeof(possible_it)) ) {
                 outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-                this_thread::sleep_for(chrono::milliseconds(200));
-                return 0;
-            }*/
+                std::cerr << "oioioi" << std::endl;
+                E_check(sp, hd, Chn);
+            }
+            */
 
 
 
@@ -1077,8 +1094,8 @@ int main(int argc, char *argv[])
 
 
             if(sp->DebugTest==1) {
-                checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA);
-                if(!E_error(sp, hd, Chn, Timer, Eold, step)) {
+                CheckLinkListIntegrity(sp, Chn);
+                if(!E_error(sp, hd, Chn, Timer, Eold, step) || !checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA) ) {
                     outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
                     std::cout << "Woopsiedaisy…\n" << std::flush;
                     std::cout << std::endl;
@@ -1126,9 +1143,11 @@ int main(int argc, char *argv[])
         // Output: Backup and Observables + System Check
         if( (step+1)%sp->T_WRITE == 0 ) {
             // system check
-            E_error(sp, hd, Chn, Timer, Eold, step+1);
-            checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA); 
             CheckLinkListIntegrity(sp, Chn);
+            if(!E_error(sp, hd, Chn, Timer, Eold, step+1) || !checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA) ) {
+                outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
+                break;
+            }
 
             // output files
             if(!sp->FIX_lngE) {
@@ -1746,6 +1765,11 @@ bool readParaInput(SysPara *sp, Header *hd)
         if( (sp->EStart > sp->EMax) || (sp->EStart < sp->EMin) ) {
             sp->EStart = sp->EMax;
         }
+        if(sp->LBOX*sp->NBOX != sp->L){
+            std::cout  << "--- ERROR --- LBOX*NBOX != L. " << std::endl; 
+            hd->os_log << "--- ERROR --- LBOX*NBOX != L. " << std::endl;
+            return false;
+        }
 
         if( read_CEMa == 0 ){ read_observ = false;
             sp->conf_EMax = sp->EMax;}
@@ -1798,9 +1822,9 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
             Chn[j].setChnNo(j);
             Chn[j].AmAc.clear();
             for( int k=0; k<sp->N_AA; k++ ) {
-                AAinsert.Setup(sp->AA_seq, k);
-                Chn[j].addM( MASS_N+MASS_C+MASS_O+MASS_R(sp->AA_seq.at(i)) );   // add mass of amino acid to chain mass
-                Chn[j].AmAc.push_back(AAinsert);
+                AAinsert.Setup(sp->AA_seq, k);                                  // setup amino acid
+                Chn[j].addM( MASS_N+MASS_C+MASS_O+MASS_R(sp->AA_seq.at(k)) );   // add mass of amino acid to chain mass
+                Chn[j].AmAc.push_back(AAinsert);                                // add amino acid to chain
             }
         }
         
@@ -2566,8 +2590,8 @@ double EO_SegBead(SysPara *sypa, Header *hd, Chain Chn[], int h1, int i1, int j1
                     }*/
                     if( dist2 < DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] ) { 
                         if( findalloverlap ) {
-                            std::cout << "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n";
-                            hd->os_log<< "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n";
+                            std::cout << "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n" << std::flush;
+                            hd->os_log<< "Overlap:  C" << h1 << "_A" << std::setfill('0') << std::setw(2) << i1 << "_B" << j1 << " - C" << index/(sypa->N_AA*4) << "_A" << std::setfill('0') << std::setw(2) << (index/4)%sypa->N_AA << "_B" << index%4 << "   d²=" << dist2 << "\td_HS=" << DiaSQValues[index][h1*sypa->N_AA*4 + i1*4 + j1] << "\n" << std::flush;
                             energy = -1;
                         }
                         else{
@@ -3295,7 +3319,8 @@ bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE)
     Bead BdCpy[4*sp->N_AA];
     double Eold, dEhb, dist2;
     double angle, axisPolar, axisAzim, cos_a, sin_a;
-    double rotAxis[3], com[3], dVec[3], newpos[3];
+    double com[3], ctr[3];                  // center of mass and center of rotation
+    double rotAxis[3], dVec[3], newpos[3];
     double rotMtrx[3][3];
     int BrokenHB[sp->N_AA*sp->N_CH][2], nBHB;
 
@@ -3321,8 +3346,8 @@ bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE)
     rotMtrx[2][0] = rotAxis[2]*rotAxis[0]*(1-cos_a) - rotAxis[1]*sin_a;
     rotMtrx[2][1] = rotAxis[2]*rotAxis[1]*(1-cos_a) + rotAxis[0]*sin_a;
     rotMtrx[2][2] = cos_a + rotAxis[2]*rotAxis[2]*(1-cos_a);
-    // center of mass
-    com[0]=0.0; com[1]=0.0; com[2]=0.0;
+    //calculate center of mass
+    /*com[0] = 0.0; com[1] = 0.0; com[2] = 0.0;
     for( int i=0; i<sp->N_AA; i++ ) {
         for( int j=0; j<4; j++ ) {
             for( int k=0; k<3; k++ ) {
@@ -3331,14 +3356,26 @@ bool rotation(SysPara *sp, Header *hd, Chain Chn[], int iChn, double &deltaE)
         }
     }
     com[0] /= Chn[iChn].getM();    com[1] /= Chn[iChn].getM();    com[2] /= Chn[iChn].getM();
+    */
+    // calculate geometric center
+    ctr[0] = 0.0; ctr[1] = 0.0; ctr[2] = 0.0;
+    for( int i=0; i<sp->N_AA; i++ ) {
+        for( int j=0; j<4; j++ ) {
+            for( int k=0; k<3; k++ ) {
+                ctr[k] += Chn[iChn].AmAc[i].Bd[j].getR( k ) + Chn[iChn].AmAc[i].Bd[j].getBC( k )*sp->L;
+            }
+        }
+    }
+    ctr[0] /= (double)(sp->N_AA*4);    ctr[1] /= (double)(sp->N_AA*4);    ctr[2] /= (double)(sp->N_AA*4);
+    
     // distance calc - rotated vector
     for(int i=0; i<sp->N_AA; i++){
         for(int j=0; j<4; j++) {
             for(int k=0; k<3; k++ ){
-                dVec[k] = Chn[iChn].AmAc[i].Bd[j].getR(k) + Chn[iChn].AmAc[i].Bd[j].getBC(k)*sp->L - com[k];
+                dVec[k] = Chn[iChn].AmAc[i].Bd[j].getR(k) + Chn[iChn].AmAc[i].Bd[j].getBC(k)*sp->L - ctr[k];
             }
             for( int k=0; k<3; k++ ) {
-                newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + com[k];
+                newpos[k] = dVec[0]*rotMtrx[0][k] + dVec[1]*rotMtrx[1][k] + dVec[2]*rotMtrx[2][k] + ctr[k];
                 Chn[iChn].AmAc[i].Bd[j].setBC( k, floor(newpos[k]/sp->L) );
                 newpos[k] = newpos[k] - sp->L*floor(newpos[k]/sp->L);
             }
@@ -3912,6 +3949,9 @@ int CheckLinkListIntegrity(SysPara *sp, Chain Chn[])
     return 0;
 }
 
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXX  MEMORY ALLOCATION FUNCTIONS  XXXXXXX
+
 // deallocate memory
 int output_memory_deallocation(SysPara *sp, Output *ot)
 {
@@ -3945,6 +3985,9 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
     return 0;
 }
 
+//          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+//          XXXXXXXXXXXXXX  OTHER FUNCTIONS  XXXXXXXXXXXXX
+
 // search value in array return boolean <3
 bool searchValueInArray(int value, int array[], int size)
 {
@@ -3959,11 +4002,15 @@ bool searchValueInArray(int value, int array[], int size)
 // check whether Bead coordinates are above certain threshold
 bool checkBeadCoordinates(SysPara *sp, Chain Chn[], double threshold)
 {
+    double distance, R, BCL;
     for(int i=0; i<sp->N_CH; i++) {
         for(int j=0; j<sp->N_AA; j++) {
             for(int k=0; k<4; k++) {
                 for(int l=0; l<3; l++) {
-                    if(abs(Chn[i].AmAc[j].Bd[k].getR(l)) > threshold) {
+                    R = Chn[i].AmAc[j].Bd[k].getR(l);
+                    BCL = Chn[i].AmAc[j].Bd[k].getBC(l)*sp->L;
+                    distance = abs( R + BCL );
+                    if(distance > threshold) {
                         return true;
                     }
                 }

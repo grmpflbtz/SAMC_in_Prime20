@@ -81,7 +81,7 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd);         
 bool newChain(SysPara *sp, Chain Chn[], int chnNum);                                    // creates new chain
 bool readParaInput(SysPara *sp, Header *hd);                                            // read system parameters from file
 bool readCoord(SysPara *sp, Header *hd, Chain Chn[]);                                   // read chain config from file
-bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum);      // reads lngE, H, gammasum, and t from input file
+bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gamma, double &gammasum);      // reads lngE, H, gammasum, and t from input file
 bool read_lngE(SysPara *sp, Header *hd, Output *ot);                                    // reads lngE data from file
 // output & observable functions
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
@@ -150,7 +150,8 @@ int main(int argc, char *argv[])
     double dist[3], new_pos[3];                             // distance vector, new y-position when new chain is constructed
     double distabs;                                         // absolute distance
     bool accept, newchn, ini_overlap;                       // acceptance value of move in SAMC; construction of new chain; overlapp in inital configuration
-    bool rlngE;                                             // was lng(E) file read
+    bool rlngE,                                             // was lng(E) file read
+         continueRun;                                       // continue previous run by reading SAMCoutput file
     int i_rand, ip, jp, moveselec, movetype;                // variables for performing moves
     int oldBox;                                             // variables for neighbour list calculations
     long unsigned int step, tcont;                          // time variables keeping track of # steps passed
@@ -260,8 +261,8 @@ int main(int argc, char *argv[])
     }
     Egrd = 0.0;
     // lngE, H, gammasum, t: read from input file or start new
-    if( readPrevRunInput(sp, hd, ot, Chn, tcont, gammasum) ) {
-        gamma = sp->GAMMA_0*sp->T_0/tcont;
+    if( readPrevRunInput(sp, hd, ot, Chn, tcont, gamma, gammasum) ) {
+        continueRun = true;
     }
     else {
         // initialize lngE and H and co.
@@ -275,7 +276,7 @@ int main(int argc, char *argv[])
     }
     // check if there is an extra input file for lngE
     rlngE = false;
-    if( read_lngE(sp, hd, ot ) ) {
+    if( !continueRun && read_lngE(sp, hd, ot ) ) {
         rlngE = true;
         tcont = 0;
     }
@@ -343,7 +344,7 @@ int main(int argc, char *argv[])
     // geometry: read from input file or create new
     ini_overlap=false;
     newchn=false;
-    if( readCoord(sp, hd, Chn) ) {
+    if( !continueRun && readCoord(sp, hd, Chn) ) {
         // overlap check
         for( int i=0; i<sp->N_CH*sp->N_AA; i++) {
             for( int j=0; j<4; j++) {
@@ -353,7 +354,7 @@ int main(int argc, char *argv[])
             }
         }
     }
-    else {
+    else if( !continueRun ) {
         std::cout << "Building new chain(s) ......... \n" << std::flush;
         hd->os_log<< "Building new chain(s) ......... \n" << std::flush;
         for( int i=0; i<sp->N_CH; i++ ) {
@@ -1336,17 +1337,17 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
         for( int i=1; i<argc; i+=2 ) {
             opt1 = argv[i];
             opt2 = argv[i+1];
-            if( opt1.compare("-c") == 0 ) {
+            if( opt1.compare("-c") == 0 ) {         // file name input initial configuration
                 hd->confnm = opt2; }
-            else if( opt1.compare("-p") == 0 ) {
+            else if( opt1.compare("-p") == 0 ) {    // file name input system parameters
                 hd->paranm = opt2; }
-            else if( opt1.compare("-l") == 0 ) {
+            else if( opt1.compare("-l") == 0 ) {    // file name input lng(E)
                 hd->lngEnm = opt2; }
-            else if( opt1.compare("-r") == 0 ) {
+            else if( opt1.compare("-r") == 0 ) {    // file name input rerun
                 hd->rrunnm = opt2; }
-            else if( opt1.compare("-d") == 0 ) {
+            else if( opt1.compare("-d") == 0 ) {    // file name output positions for debugging
                 hd->dbposi = opt2; }
-            else if( opt1.compare("-rng") == 0 ) {
+            else if( opt1.compare("-rng") == 0 ) {  // integer value to be substracted from seed in parameter file
                 sp->add_Seed = stoi(opt2); }
             else {
                 display_help = true;
@@ -1358,14 +1359,11 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
     if(display_help == true) {
         std::cout << "Unable to process argument input." << std::endl
                   << "Usage: " << argv[0] << " [OPTION1] [FILE1] [OPTION2] [FILE2] ..." << std::endl
-                  << "  -c, input initial configuration" << std::endl
-                  << "  -p, input system parameters" << std::endl
-                  << "  -l, input density of states (lng[E])" << std::endl
-                  << "  -r, input rerun data" << std::endl
-                  << "  -d, output positions for debugging" << std::endl
-                  << "  -h, output hydrogen bond matrices" << std::endl
-                  << "  -g, output tensor of gyration" << std::endl
-                  << "If not specified default file names will be used" << std::endl
+                  << "  -c, file name input initial configuration" << std::endl
+                  << "  -p, file name input system parameters" << std::endl
+                  << "  -l, file name input density of states (lng[E])" << std::endl
+                  << "  -r, file name input rerun data" << std::endl
+                  << "  -d, file name output positions for debugging" << std::endl
                   << "  -rng [int], integer value to be substracted from seed in parameter file" << std::endl;
         return -1;
     }
@@ -1894,14 +1892,20 @@ bool readCoord(SysPara *sp, Header *hd, Chain Chn[])
     }
 }
 // reads lngE, H, gammasum, and t from input file
-bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gammasum)
+bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long unsigned int &tcont, double &gamma, double &gammasum)
 {
+    AmiAc AAinsert;
     ifstream input;
     stringstream ss_line;
-    std::string s_line, s_token;
+    stringstream inp_line_stream;
+    string inp_line_string;
+    string s_line, s_token;
     char delim = ' ';
     int num;
-    double Ebin1, Ebin2;
+    string beatID;
+    double newposBC[3];
+    double x, y, z,
+           Ebin1, Ebin2;
 
     input.open(hd->rrunnm);
     if( input.is_open() ) {
@@ -1920,19 +1924,30 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
                 std::getline(ss_line, s_token, delim);
                 std::getline(ss_line, s_token, delim);
                 if( s_token.length() == 0 ) continue;
+                // extract number of previous MC steps
                 if( s_token.compare("number") == 0 ) {
                     std::getline(ss_line,s_token, delim);
                     std::getline(ss_line,s_token, delim);
                     std::getline(ss_line,s_token, delim);
                     std::getline(ss_line,s_token, delim);
                     tcont = stoi(s_token, nullptr);
-                    std::cout << "  continue after step " << tcont << std::endl;
                 }
+                // extract gammasum
                 else if( s_token.compare("gammasum") == 0 ) {
                     std::getline(ss_line, s_token, delim);
                     std::getline(ss_line, s_token, delim);
                     gammasum = stod(s_token, nullptr);
-                    std::cout << "  with gammasum = " << gammasum << std::endl;
+                }
+                // extract gamma_0 and T_0
+                else if( s_token.compare("gamma_0") == 0 ) {
+                    std::getline(ss_line, s_token, delim);
+                    std::getline(ss_line, s_token, delim);
+                    sp->GAMMA_0 = stod(s_token, nullptr);
+                    std::getline(ss_line, s_token, delim);
+                    std::getline(ss_line, s_token, delim);
+                    std::getline(ss_line, s_token, delim);
+                    sp->T_0 = stod(s_token, nullptr);
+                    gamma = sp->GAMMA_0*sp->T_0/tcont;
                 }
             }
             else break;
@@ -1942,6 +1957,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
             input.close();
             return false;
         }
+        // read lngE and H
         for( int i=0; i<sp->NBin; i++ ) {
             if( input.good() ) {
                 input >> num >> Ebin1 >> Ebin2 >> ot->lngE[i] >> ot->H[i];
@@ -1960,9 +1976,72 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
                 return false;
             }
         }
+        // skip two lines from input file
+        std::getline(input, inp_line_string);
+        std::getline(input, inp_line_string);
+        std::getline(input, inp_line_string);
+
+        // read configuration
+        // setup chains
+        for( int i=0; i<sp->N_CH; i++ ) {
+            Chn[i].setChnNo(i);
+            Chn[i].AmAc.clear();
+            for( int j=0; j<sp->N_AA; j++ ) {
+                AAinsert.Setup(sp->AA_seq, j);                                  // setup amino acid
+                Chn[i].addM( MASS_N+MASS_C+MASS_O+MASS_R(sp->AA_seq.at(j)) );   // add mass of amino acid to chain mass
+                Chn[i].AmAc.push_back(AAinsert);                                // add amino acid to chain
+            }
+        }
+        // read configuration
+        for( int i=0; i<sp->N_CH*sp->N_AA*4; i++) {
+            if( input.good() ) {
+                std::getline(input, inp_line_string);
+                inp_line_stream.clear();
+                inp_line_stream.str(inp_line_string);
+                inp_line_stream >> beatID >> x >> y >> z;
+                Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(x, y, z);
+                Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].set_btype(i%4);
+                switch(i%4) {
+                    case 0: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_N); break;
+                    case 1: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_C); break;
+                    case 2: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM(MASS_O); break;
+                    case 3: Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setM( MASS_R(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].get_AAalp()) ); break;
+                }
+            }
+            else {
+                hd->os_log<< "--- ERROR ---\tencountered EOF inside Config line << " << i << " expected " << sp->N_CH*sp->N_AA << std::endl;
+                std::cout << "--- ERROR ---\tencountered EOF inside Config line << " << i << " expected " << sp->N_CH*sp->N_AA << std::endl;
+                input.close();
+                return false;
+            }
+        }
         input.close();
-        hd->os_log<< "complete" << std::endl;
-        std::cout << "complete" << std::endl;
+
+        // PBC
+        for( int i=0; i<sp->N_CH*sp->N_AA*4; i++ ) {
+            for( int k=0; k<3; k++ ) {
+                Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setBC(k, floor(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k) / sp->L) );
+                newposBC[k] = Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k) - sp->L*floor(Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].getR(k)/(double)sp->L);
+            }
+            Chn[(i/4)/sp->N_AA].AmAc[(i/4)%sp->N_AA].Bd[i%4].setR(newposBC[0], newposBC[1], newposBC[2]);
+        }
+
+        // create neighbour list
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j].setBox( assignBox(sp, Chn[i/sp->N_AA].AmAc[i%sp->N_AA].Bd[j]) );
+            }
+        }
+        for( int i=0; i<sp->N_CH*sp->N_AA; i++ ) {
+            for( int j=0; j<4; j++ ) {
+                LinkListInsert(sp, Chn, i, j);
+            }
+        }
+        // setup DiaSQValues Matrix
+        DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
+
+        hd->os_log<< "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
+        std::cout << "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
         return true;
     }
     return false;

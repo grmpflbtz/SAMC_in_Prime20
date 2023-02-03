@@ -1947,7 +1947,7 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
                     std::getline(ss_line, s_token, delim);
                     std::getline(ss_line, s_token, delim);
                     sp->T_0 = stod(s_token, nullptr);
-                    gamma = sp->GAMMA_0*sp->T_0/tcont;
+                    gamma = min(sp->GAMMA_0, sp->T_0/(double)tcont);
                 }
             }
             else break;
@@ -2040,8 +2040,8 @@ bool readPrevRunInput(SysPara *sp, Header *hd, Output *ot, Chain Chn[], long uns
         // setup DiaSQValues Matrix
         DiaSQValuesSetup(Chn, sp->N_AA, sp->N_CH);
 
-        hd->os_log<< "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
-        std::cout << "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
+        hd->os_log<< std::setprecision(15) << "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
+        std::cout << std::setprecision(15) << "complete" << std::endl << "  continue after step " << tcont << ", gamma_0=" << sp->GAMMA_0 << ", T_0=" << sp->T_0 << " -> gamma=" << gamma << ", gammasum=" << gammasum << std::endl;
         return true;
     }
     return false;

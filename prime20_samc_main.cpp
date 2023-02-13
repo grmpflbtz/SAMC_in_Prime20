@@ -1147,7 +1147,6 @@ int main(int argc, char *argv[])
             CheckLinkListIntegrity(sp, Chn);
             if(!E_error(sp, hd, Chn, Timer, Eold, step+1) || !checkBndLngth(sp, hd, Chn, 0, sp->N_CH*sp->N_AA) ) {
                 outputPositions(sp,hd, hd->dbposi, Chn, 1, Eold);
-                break;
             }
 
             // output files

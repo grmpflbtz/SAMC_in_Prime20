@@ -53,6 +53,8 @@ struct SysPara {
 
     bool FIX_lngE;          // fixed DOS run - no SAMC, only production of observables
     bool HB_ContMat;        // Hydrogen bond contact matrices
+    bool SC_ContMat;        // side chain contact matrices
+    bool Res_ContMat;       // residue contact matrices
     bool Ree;               // end-to-end distance distribution
     bool tGyr;              // tensor of gyration
     bool intrainterMol;     // intra- vs inter-molecular energies
@@ -79,6 +81,8 @@ struct Header {
     std::string dbposi;         // output file name debug position
     std::string iniconf;        // output file name config created by newChain()
     std::string hbmatr;         // output file name HB matrices
+    std::string scmatr;         // output file name SC matrices
+    std::string resmatr;        // output file name residue contact matrices
     std::string reenm;          // output file name end-to-end distance distribution
     std::string tGyrnm;         // output file name tensor of gyration
     std::string intrainterMol;  // output file name inter-vs-intra-molecular energies
@@ -96,6 +100,8 @@ struct Output {
     long unsigned int *H;           // energy bin visitation histogram
     double *lngE;                   // lng(E)
     double *contHB;                 // hydrogen bond contact matrices
+    double *contSC;                 // side chain contact matrices
+    double *contRes;                // residue contact matrices
     double *Ree2;                   // squared end-to-end distance distribution
     double **rGyr;                  // sum radius of gyration for each chain and energy bin
     double *rGyrCur;                // current radius of gyration

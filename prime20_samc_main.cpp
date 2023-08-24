@@ -86,6 +86,8 @@ bool read_lngE(SysPara *sp, Header *hd, Output *ot);                            
 // output & observable functions
 bool outputPositions(SysPara *sp, Header *hd, std::string fnm, Chain Chn[], int mode, double ener); // writes positions to file "fnm"
 bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step);                       // write hydrogen bond matrix
+bool output_SCmat(SysPara *sp, Header *hd, Output *ot, int step);                       // write side chain matrix
+bool output_Resmat(SysPara *sp, Header *hd, Output *ot, int step);                      // write residue contact matrix
 // NEW OBSERVABLE: bool output_alpha_beta_hb(SysPara *sp, Header *hd, Output *ot, int step)                // write number of alpha and beta hydrogen bonds
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
@@ -215,6 +217,8 @@ int main(int argc, char *argv[])
     ot->H = new long unsigned int[sp->NBin];
     ot->lngE = new double[sp->NBin];
     ot->contHB = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
+    ot->contSC = new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
+    ot->contRes= new double[sp->NBin * sp->N_CH*sp->N_AA * sp->N_CH*sp->N_AA];
     ot->Ree2 = new double[sp->N_CH * sp->NBin];
     ot->rGyr = new double*[sp->N_CH];
         for( int i=0; i<sp->N_CH; i++ ) { ot->rGyr[i] = new double[sp->NBin]; }
@@ -295,6 +299,24 @@ int main(int argc, char *argv[])
             for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
                 for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
                     ot->contHB[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
+                }
+            }
+        }
+    }
+    if(sp->SC_ContMat) {
+        for( int i=0; i<sp->NBin; i++ ) { 
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    ot->contSC[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
+                }
+            }
+        }
+    }
+    if(sp->Res_ContMat) {
+        for( int i=0; i<sp->NBin; i++ ) { 
+            for( int j=0; j<sp->N_CH*sp->N_AA; j++ ) {
+                for( int k=0; k<sp->N_CH*sp->N_AA; k++ ) {
+                    ot->contRes[i*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + j*sp->N_CH*sp->N_AA + k] = 0;
                 }
             }
         }
@@ -1064,6 +1086,12 @@ int main(int argc, char *argv[])
                     if( HBList[i][0] > -1 ) { ot->contHB[ eBin_o*sp->N_CH*sp->N_AA*sp->N_CH*sp->N_AA + i*sp->N_CH*sp->N_AA + HBList[i][0] ] += 1; }
                 }
             }
+            if(sp->SC_ContMat) {
+                // check Side-chain contacts
+            }
+            if(sp->Res_ContMat) {
+                // check Residue contacts
+            }
             if(sp->Ree) {
                 for( int i=0; i<sp->N_CH; i++ ) {
                     std::tie(dist[0], dist[1], dist[2]) = distVecBC(sp, Chn[i].AmAc[0].Bd[0], Chn[i].AmAc[sp->N_AA-1].Bd[3]);
@@ -1157,6 +1185,12 @@ int main(int argc, char *argv[])
             }
             if(sp->HB_ContMat) {
                 output_HBmat(sp, hd, ot, step+1);
+            }
+            if(sp->SC_ContMat) {
+                output_SCmat(sp, hd, ot, step+1);
+            }
+            if(sp->Res_ContMat) {
+                output_Resmat(sp, hd, ot, step+1);
             }
             if(sp->Ree) {
                 output_Ree(sp, hd, ot, step+1);
@@ -1286,6 +1320,10 @@ int sim_parameter_print(SysPara *sp, ostream &os)
        << ">> observables <<" << std::endl;
         if( sp->HB_ContMat == true ) { obs = 1;
             os << "- Hydrogen bond contact matrices" << std::endl; }
+        if( sp->SC_ContMat == true ) { obs = 1;
+            os << "- Side-chain contact matrices" << std::endl; }
+        if( sp->Res_ContMat == true) { obs = 1;
+            os << "- Residue contact matrices" << std::endl; }
         if( sp->tGyr == true ) { obs = 1;
             os << "- Tensor of gyration" << std::endl; }
         if( sp->wConfig == true ) { obs = 1;
@@ -1320,6 +1358,8 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
     hd->dbposi = "AnorLondo.xyz";
     hd->iniconf= "config_preSAMC.xyz";
     hd->hbmatr = "HBmat.dat";
+    hd->scmatr = "SCmat.dat";
+    hd->resmatr= "ResMat.dat";
     hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
     hd->intrainterMol = "intra-vs-inter-molecular-energies.dat";
@@ -1532,6 +1572,8 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_ClOp= 0;
     int read_FixL= 0;
     int read_HBCM= 0;
+    int read_SCCM= 0;
+    int read_ResM= 0;
     int read_Ree = 0;
     int read_tGyr= 0;
     int read_iiE = 0;
@@ -1613,6 +1655,12 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("HB_ContMat")==0 ) {
                     if( value.compare("true")==0 ) { sp->HB_ContMat = true; read_HBCM = 1; }
                     else if( value.compare("false")==0 ) { sp->HB_ContMat = false; read_HBCM = 1; } }
+                else if( option.compare("SC_ContMat")==0 ) {
+                    if( value.compare("true")==0 ) { sp->SC_ContMat = true; read_SCCM = 1; }
+                    else if( value.compare("false")==0 ) { sp->SC_ContMat = false; read_SCCM = 1; } }
+                else if( option.compare("Res_ContMat")==0 ) {
+                    if( value.compare("true")==0 ) { sp->Res_ContMat = true; read_ResM = 1; }
+                    else if( value.compare("false")==0 ) { sp->Res_ContMat = false; read_ResM = 1; } }
                 else if( option.compare("Ree")==0 ) {
                     if( value.compare("true")==0 ) { sp->Ree = true; read_Ree = 1; }
                     else if( value.compare("false")==0 ) { sp->Ree = false; read_Ree = 1; } }
@@ -1732,6 +1780,14 @@ bool readParaInput(SysPara *sp, Header *hd)
             sp->HB_ContMat = false;
             std::cout  << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! HB_ContMat not found. Set to FALSE by default" << std::endl;}
+        if( read_SCCM == 0 ){ read_observ = false;
+            sp->SC_ContMat = false;
+            std::cout  << "Warning! SC_ContMat not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! SC_ContMat not found. Set to FALSE by default" << std::endl;}
+        if( read_ResM == 0 ){ read_observ = false;
+            sp->Res_ContMat = false;
+            std::cout  << "Warning! Res_ContMat not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! Res_ContMat not found. Set to FALSE by default" << std::endl;}
         if( read_Ree  == 0 ){ read_observ = false;
             sp->Ree = false;
             std::cout  << "Warning! Ree not found. Set to FALSE by default" << std::endl; 
@@ -2155,6 +2211,22 @@ bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step)
         std::cout << std::endl << "error opening " << hd->hbmatr << std::endl;
         return false;
     }
+}
+// write side chain matrix
+bool output_SCmat(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->scmatr, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# Side chain contact matrices after " << step+1 << " steps" << std::endl;
+    }
+
+    return true;
+}
+// write residue contact matrix
+bool output_Resmat(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    return true;
 }
 // write end-to-end-distance
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step)
@@ -4036,6 +4108,8 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
     delete[] ot->H;
     delete[] ot->lngE;
     delete[] ot->contHB;
+    delete[] ot->contSC;
+    delete[] ot->contRes;
     delete[] ot->Ree2;
     for( int i=0; i<sp->N_CH; i++ ) { 
         delete[] ot->rGyr[i]; }

@@ -57,6 +57,7 @@ struct SysPara {
     bool tGyr;              // tensor of gyration
     bool intrainterMol;     // intra- vs inter-molecular energies
     bool Et;                // energy time development
+    bool HelixSheetDistPerRes;  // Per residue: Helix, Sheet, Other; distribution of secondary structure per residue
     bool dihedral;          // dihedral angles
     bool wConfig;           // write configurations for energies specified by vector ConfigE
         double conf_EMax;
@@ -84,6 +85,7 @@ struct Header {
     std::string intrainterMol;  // output file name inter-vs-intra-molecular energies
     std::string grdcnm;         // output file name ground state configuration
     std::string enertm;         // output file name energy time development
+    std::string hsdistrnm;      // output file name secondary structure distribution
     std::string snapshots;      // output file name snapshots
     std::string dihedPhinm;     // output file name dihedral angle Phi
     std::string dihedPsinm;     // output file name dihedral angle Psi
@@ -107,8 +109,11 @@ struct Output {
     double *intrainterE;            // inter- and intra-molecular energies
         int intrainterE_freq;       // frequency of interintraE calculations
     double *Et;                     // energy time development
-    long unsigned int ***dihePhi;
-    long unsigned int ***dihePsi;
+    long unsigned int ***HelixSheetDistPerRes;     // Per residue: Helix, Sheet, Other; distribution of secondary structure per residue
+        int HelixSheetDistPerRes_freq;             // frequency of HelixSheetDistPerRes calculations
+        long unsigned int *HelixSheetDistPerRes_Hist;            // histogram of HelixSheetDistPerRes
+    long unsigned int ***dihePhi;   // dihedral angle Phi
+    long unsigned int ***dihePsi;   // dihedral angle Psi
     int conf_Ntot;                  // # of total configs recorded
     double conf_Eprev;              // previously recorded energy
     unsigned long conf_tprev;        // previously step recorded at

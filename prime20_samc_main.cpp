@@ -90,6 +90,7 @@ bool output_HBmat(SysPara *sp, Header *hd, Output *ot, int step);               
 bool output_Ree(SysPara *sp, Header *hd, Output *ot, int step);                         // write end-to-end distance
 bool output_tGyr(SysPara *sp, Header *hd, Output *ot, int step);                        // write tensor of gyration
 bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step);             // write inter- and intra-molecular energies
+bool output_HelixSheetDistPerRes(SysPara *sp, Header *hd, Output *ot, int step);        // write Helix, Sheet, Turn, Other distribution per residue
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init);                // write energy time development
 bool output_dihedral(SysPara *sp, Header *hd, Output *ot, int step);                    // write dihedral angles
 bool output_snapshots(SysPara *sp, Header *hd, Output *ot, Chain Chn[], double ener, unsigned long step, int init); // write snapshots
@@ -117,6 +118,7 @@ int calc_gyration_radius(SysPara *sp, Output *ot, Chain Chn[], int eBin);       
 int calc_gyration_tensor(SysPara *sp, Output *ot, Chain Chn[], int eBin);               // calculate and sum up tensor of gyration
 int calc_vanderWaals(SysPara *sp, Output *ot, Chain Chn[]);                             // calculate van-der-Waals energy
 int calc_HBenergy(SysPara *sp, Output *ot);                                             // calculate HB energy
+int calc_HelixSheetDistPerRes(SysPara *sp, Output *ot, Chain Chn[], int eBin);          // calculate Helix, Sheet, Other distribution per residue
 double calc_phi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Phi
 double calc_psi(SysPara *sp, Chain Chn[], int p);                                       // calculate dihedral angle Psi
 // neighbour list functions
@@ -232,6 +234,15 @@ int main(int argc, char *argv[])
     ot->intrainterE = new double[sp->NBin * 5];
         ot->intrainterE_freq = sp->N_CH*sp->N_AA*4;
     ot->Et = new double[sp->T_WRITE];
+    ot->HelixSheetDistPerRes = new long unsigned int**[sp->NBin];
+        for( int i=0; i<sp->NBin; i++ ) {
+            ot->HelixSheetDistPerRes[i] = new long unsigned int*[sp->N_AA];
+            for( int j=0; j<sp->N_AA; j++ ) {
+                ot->HelixSheetDistPerRes[i][j] = new long unsigned int[6];  // 6 = Helix, Helix-strict, Sheet, Sheet-strict, Turn, Other
+            }
+        }
+        ot->HelixSheetDistPerRes_freq = sp->N_CH*sp->N_AA*4;
+        ot->HelixSheetDistPerRes_Hist = new long unsigned int[sp->NBin];
     ot->dihePhi = new long unsigned int**[sp->NBin];
     ot->dihePsi = new long unsigned int**[sp->NBin];
         for(int i=0; i<sp->NBin; i++) {
@@ -310,6 +321,16 @@ int main(int argc, char *argv[])
                 ot->rGyr[i][j] = 0;
                 for( int k=0; k<4; k++ ) {
                     ot->tGyrEig[i][j][k] = 0;
+                }
+            }
+        }
+    }
+    if(sp->HelixSheetDistPerRes) {
+        for( int i=0; i<sp->NBin; i++ ) {
+            ot->HelixSheetDistPerRes_Hist[i] = 0;
+            for( int j=0; j<sp->N_AA; j++ ) {
+                for( int k=0; k<6; k++ ) {  // 6 = Helix, Helix-strict, Sheet, Sheet-strict, Turn, Other
+                    ot->HelixSheetDistPerRes[i][j][k] = 0;
                 }
             }
         }
@@ -722,29 +743,6 @@ int main(int argc, char *argv[])
         // lets go
         for( it=0; it<sp->stepit; it++ ) {
 
-
-
-            // debuggin
-            // check if coordinate exceed 1e9
-            /*
-            if( checkBeadCoordinates(sp, Chn, 1e5) ) {
-                outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-                std::cerr << "ERROR: bead coordinates are not finite" << std::endl;
-                //this_thread::sleep_for(chrono::milliseconds(200));
-                //return 0;
-            }
-            /*
-            int possible_it[] = {193, 194};
-            if( step == 5 && searchValueInArray(it, possible_it, sizeof(possible_it)) ) {
-                outputPositions(sp, hd, hd->dbposi, Chn, 1, Eold);
-                std::cerr << "oioioi" << std::endl;
-                E_check(sp, hd, Chn);
-            }
-            */
-
-
-
-
             // print estimated remaining time
             if( sp->cluster_opt==0 && step%((int)1e3) == 0 && it==0 ) {
                 Timer.PrintProgress(step-tcont, sp->T_MAX-tcont);
@@ -1140,6 +1138,12 @@ int main(int argc, char *argv[])
                 ot->intrainterE[eBin_o*5 + 4] += ot->HBener[1];
             }
         }
+        // Helix Sheet Distribution
+        if(sp->HelixSheetDistPerRes) {
+            if(step%ot->HelixSheetDistPerRes_freq == 0 ) {
+                calc_HelixSheetDistPerRes(sp, ot, Chn, eBin_o);
+            }
+        }
 
         // Output: Backup and Observables + System Check
         if( (step+1)%sp->T_WRITE == 0 ) {
@@ -1166,6 +1170,9 @@ int main(int argc, char *argv[])
             }
             if(sp->intrainterMol) {
                 output_intra_inter_mol(sp, hd, ot, step+1);
+            }
+            if(sp->HelixSheetDistPerRes) {
+                output_HelixSheetDistPerRes(sp, hd, ot, step+1);
             }
             if(sp->Et) {
                 output_Et(sp, hd, ot, step+1, 1);
@@ -1292,6 +1299,8 @@ int sim_parameter_print(SysPara *sp, ostream &os)
             os << "- Configuration snapshots in E(" << std::setprecision(4) << sp->conf_EMin << ";" << std::setprecision(4) << sp->conf_EMax << "); Nmax = " << sp->conf_Nmax << std::endl; }
         if( sp->Et == true ) { obs = 1;
             os << "- E(t) energy time development" << std::endl; }
+        if( sp->HelixSheetDistPerRes == true ) { obs = 1;
+            os << "- Helix and sheet distribution per residue" << std::endl; }
         if( sp->dihedral == true ) { obs = 1;
             os << "- dihedral angles Phi and Psi" << std::endl; }
         if( sp->intrainterMol == true ) { obs = 1;
@@ -1323,6 +1332,7 @@ int CommandInitialize(int argc, char *argv[], SysPara *sp, Header *hd)
     hd->reenm  = "ReeDAve.dat";
     hd->tGyrnm = "tGyr.dat";
     hd->intrainterMol = "intra-vs-inter-molecular-energies.dat";
+    hd->hsdistrnm = "HelixSheetDistPerRes.dat";
     hd->grdcnm = "grdConfig.xyz";
     hd->enertm = "Et.dat";
     hd->snapshots = "snapshots.dat";
@@ -1536,6 +1546,7 @@ bool readParaInput(SysPara *sp, Header *hd)
     int read_tGyr= 0;
     int read_iiE = 0;
     int read_Et  = 0;
+    int read_hsDist = 0;
     int read_angl= 0;
     int read_WCon= 0;
     int read_CEMa= 0;
@@ -1625,6 +1636,9 @@ bool readParaInput(SysPara *sp, Header *hd)
                 else if( option.compare("ener_t")==0 ) {
                     if( value.compare("true")==0 ) {sp->Et = true; read_Et = 1; }
                     else if( value.compare("false")==0 ) { sp->Et = false; read_Et = 1; } }
+                else if( option.compare("HelixSheetDist")==0 ) {
+                    if( value.compare("true")==0 ) {sp->HelixSheetDistPerRes = true; read_hsDist = 1; }
+                    else if( value.compare("false")==0 ) { sp->HelixSheetDistPerRes = false; read_hsDist = 1; } }
                 else if( option.compare("dihedral")==0 ) {
                     if( value.compare("true")==0 ) {sp->dihedral = true; read_angl = 1; }
                     else if( value.compare("false")==0 ) { sp->dihedral = false; read_angl = 1; } }
@@ -1748,6 +1762,10 @@ bool readParaInput(SysPara *sp, Header *hd)
             sp->Et = false;
             std::cout  << "Warning! Et not found. Set to FALSE by default" << std::endl; 
             hd->os_log << "Warning! Et not found. Set to FALSE by default" << std::endl;}
+        if( read_hsDist == 0 ){ read_observ = false;
+            sp->HelixSheetDistPerRes = false;
+            std::cout  << "Warning! HelixSheetDist not found. Set to FALSE by default" << std::endl; 
+            hd->os_log << "Warning! HelixSheetDist not found. Set to FALSE by default" << std::endl;}
         if( read_angl == 0 ){ read_observ = false;
             sp->dihedral = false;
             std::cout  << "Warning! dihedral not found. Set to FALSE by default" << std::endl; 
@@ -2245,6 +2263,39 @@ bool output_intra_inter_mol(SysPara *sp, Header *hd, Output *ot, int step)
         return false;
     }
 }
+// write Helix, Sheet, Turn, Other distribution per residue
+bool output_HelixSheetDistPerRes(SysPara *sp, Header *hd, Output *ot, int step)
+{
+    ofstream ostr;
+    ostr.open(hd->hsdistrnm, ios::out);
+    if( ostr.is_open() ) {
+        ostr << "# Helix, Sheet, Turn, Other - distribution per residue" << std::endl
+             << "# N_CH=" << sp->N_CH << " N_AA=" << sp->N_AA << " seq=" << sp->AA_seq << std::endl
+             << "# Emin=" << sp->EMin << " Emax=" << sp->EMax << " BinW=" << sp->BinW << " NBin=" << sp->NBin << std::endl
+             << "# no. MC-steps=" << step << std::endl
+             << "# Helix region Phi(" << AnglesAlphaHelix_Loose[0][0] << "," << AnglesAlphaHelix_Loose[0][1] << "); Phi_strict(" << AnglesAlphaHelix_Strict[0][0] << "," << AnglesAlphaHelix_Strict[0][1] << "); Psi(" << AnglesAlphaHelix_Loose[1][0] << "," << AnglesAlphaHelix_Loose[1][1] << "); Psi_strict(" << AnglesAlphaHelix_Strict[1][0] << "," << AnglesAlphaHelix_Strict[1][1] << ")" << std::endl
+             << "# Sheet region Phi(" << AnglesBetaSheet_Loose[0][0] << "," << AnglesBetaSheet_Loose[0][1] << "); Phi_strict(" << AnglesBetaSheet_Strict[0][0] << "," << AnglesBetaSheet_Strict[0][1] << "); Psi(" << AnglesBetaSheet_Loose[1][0] << "," << AnglesBetaSheet_Loose[1][1] << "); Psi_strict(" << AnglesBetaSheet_Strict[1][0] << "," << AnglesBetaSheet_Strict[1][1] << ")" << std::endl
+             << "# Turn region Phi(" << AnglesTurn[0][0] << "," << AnglesTurn[0][1] << "); Psi(" << AnglesTurn[1][0] << "," << AnglesTurn[1][1] << ")" << std::endl
+             << "# Position Res Helix Helix-strict Sheet Sheet-strict Turn Other" << std::endl;
+        for( int i=0; i<sp->NBin; i++) {
+            ostr << "Bin=" << i << "; H=" << ot->HelixSheetDistPerRes_Hist[i] << std::endl;
+            for( int ii=0; ii<sp->N_AA; ii++) {
+                ostr << ii << " " << sp->AA_seq[ii];
+                for( int iii=0; iii<6; iii++ ) {
+                    ostr << " " << ot->HelixSheetDistPerRes[i][ii][iii];
+                }
+                ostr << std::endl;
+            }
+        }
+        ostr.close();
+        return true;
+    }
+    else {
+        hd->os_log<< std::endl << "--- ERROR ---\tcould not open file " << hd->hsdistrnm << std::endl;
+        std::cout << std::endl << "--- ERROR ---\tcould not open file " << hd->hsdistrnm << std::endl;
+        return false;
+    }
+}
 // write energy time development
 bool output_Et(SysPara *sp, Header *hd, Output *ot, int step, int init)
 {
@@ -2478,6 +2529,8 @@ bool BackupProdRun(SysPara *sp, Header *hd, Output *ot, Timer &Timer, int single
             results << "# - Configuration snapshots in E(" << std::setprecision(4) << sp->conf_EMin << ";" << std::setprecision(4) << sp->conf_EMax << "); Nmax = " << sp->conf_Nmax << std::endl; }
         if( sp->Et == true ) { obs = 1;
             results << "# - E(t) energy time development" << std::endl; }
+        if( sp->HelixSheetDistPerRes == true ) { obs = 1;
+            results << "# - Helix and sheet distribution per residue" << std::endl; }
         if( sp->dihedral == true ) { obs = 1;
             results << "# - dihedral angles Phi and Psi" << std::endl; }
         if( sp->intrainterMol == true ) { obs = 1;
@@ -3896,8 +3949,10 @@ double calc_phi(SysPara *sp, Chain Chn[], int p)
     n2[0] /= sqrt(nsq); n2[1] /= sqrt(nsq); n2[2] /= sqrt(nsq);
     // angle between n1 and n2
     angl = dotPro(n1, n2);
-    if(angl <= -1) return -180.0;
-    if(angl >= 1)  return 0.0;
+    if((angl < -1) || (angl > 1)) {
+        std::cout << "calc_phi() failed on AmAc[" << p << "]: dotProduct of normal vectors > 1" << endl;
+
+    }
     angl = acos(angl)*180.0/M_PI;
     // sign of angle: right-hand rotation of b1 (C-N) and n2 (N_Ca_C normal vector) share one half-space, else left-hand.
     sgn = -1;
@@ -3925,8 +3980,9 @@ double calc_psi(SysPara *sp, Chain Chn[], int p)
     n2[0] /= sqrt(nsq); n2[1] /= sqrt(nsq); n2[2] /= sqrt(nsq);
     // angle between n1 and n2
     angl = dotPro(n1, n2);
-    if(angl <= -1) return -180.0;
-    if(angl >= 1)  return 0.0;
+    if( (angl < -1) || (angl > 1) ) {
+        std::cout << "calc_psi() failed on AmAc[" << p << "]: dotProduct of normal vectors > 1" << endl;
+    }
     angl = acos(angl)*180.0/M_PI;
     // sign of angle: right-hand rotation of b1 (N-Ca) and n2 (Ca-C-N normal vector) share one half-space, else left-hand.
     sgn = -1;
@@ -3934,6 +3990,42 @@ double calc_psi(SysPara *sp, Chain Chn[], int p)
 
     return sgn*angl;
 }
+
+// calculate Helix Sheet distribution per residue
+int calc_HelixSheetDistPerRes(SysPara *sp, Output *ot, Chain Chn[], int eBin)
+{
+    double phi, psi;
+    
+    for( int i=0; i<sp->N_CH; i++ ) {
+        for( int j=0; j<sp->N_AA; j++ ) {
+            phi = calc_phi(sp, Chn, i*sp->N_AA+j);
+            psi = calc_psi(sp, Chn, i*sp->N_AA+j);
+            if( (phi > AnglesAlphaHelix_Loose[0][0]) && (phi < AnglesAlphaHelix_Loose[0][1]) && (psi > AnglesAlphaHelix_Loose[1][0]) && (psi < AnglesAlphaHelix_Loose[1][1]) ) {
+                ot->HelixSheetDistPerRes[eBin][j][0] += 1;      // Helix region
+                if( (phi > AnglesAlphaHelix_Strict[0][0]) && (phi < AnglesAlphaHelix_Strict[0][1]) && (psi > AnglesAlphaHelix_Strict[1][0]) && (psi < AnglesAlphaHelix_Strict[1][1]) ) {
+                    ot->HelixSheetDistPerRes[eBin][j][1] += 1;  // strict Helix
+                }
+            }
+            else if( (phi > AnglesBetaSheet_Loose[0][0]) && (phi < AnglesBetaSheet_Loose[0][1]) && (((psi > AnglesBetaSheet_Loose[1][0]) && (psi < 180)) || ((psi > -180) && (psi < AnglesBetaSheet_Loose[1][1]))) ) {
+                ot->HelixSheetDistPerRes[eBin][j][2] += 1;      // beta Sheet
+                if( (phi > AnglesBetaSheet_Strict[0][0]) && (phi < AnglesBetaSheet_Strict[0][1]) && (psi > AnglesBetaSheet_Strict[1][0]) && (psi < AnglesBetaSheet_Strict[1][1]) ) {
+                    ot->HelixSheetDistPerRes[eBin][j][3] += 1;  // strict Sheet
+                }
+            }
+            else if( (phi > AnglesTurn[0][0]) && (phi < AnglesTurn[0][1]) && (psi > AnglesTurn[1][0]) && (psi < AnglesTurn[1][1]) ) {
+                ot->HelixSheetDistPerRes[eBin][j][4] += 1;      // Turn
+            }
+            else {
+                ot->HelixSheetDistPerRes[eBin][j][5] += 1;      // Coil
+            }
+        }
+    }
+    // add one to histogram
+    ot->HelixSheetDistPerRes_Hist[eBin] += 1;           // histogram
+
+    return 0;
+}
+
 
 //          XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //          XXXXXXXXXXXX  LINK LIST FUNCTIONS  XXXXXXXXXXX
@@ -4050,6 +4142,11 @@ int output_memory_deallocation(SysPara *sp, Output *ot)
         delete[] ot->tGyrEigCur[i]; }
     delete[] ot->tGyrEigCur;
     delete[] ot->intrainterE;
+    for( int i=0; i<sp->NBin; i++ ) {
+        for( int j=0; j<sp->N_AA; j++ ) {
+            delete[] ot->HelixSheetDistPerRes[i][j]; }
+            delete[] ot->HelixSheetDistPerRes[i]; }
+            delete[] ot->HelixSheetDistPerRes;
     delete[] ot->Et;
     for( int i=0; i<sp->NBin; i++ ) {
         for( int j=0; j<(sp->N_CH*sp->N_AA); j++ ) {

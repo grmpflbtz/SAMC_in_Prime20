@@ -80,6 +80,14 @@ const double MASS_N = 15.0;		//Backbone NH
 const double MASS_C = 13.0;		//Backbone C(alpha)H
 const double MASS_O = 28.0;		//Backbone CO
 const double MASS_R(char AAnm);
+
+// Ramachandran regions (Hovmöller2002)
+const int AnglesAlphaHelix_Loose[2][2]  = {{-180,0},{-100,45}};
+const int AnglesAlphaHelix_Strict[2][2] = {{-89,-39},{-66,-16}};
+const int AnglesBetaSheet_Loose[2][2]   = {{-180,-45},{45,-135}};
+const int AnglesBetaSheet_Strict[2][2]  = {{-130,-105},{128,147}};
+const int AnglesTurn[2][2]              = {{0,180},{-90,90}};
+
 //-------------------------------------------------------------
 //            >>  FUNCTIONS PRODUCING PARAMETERS  <<
 
